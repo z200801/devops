@@ -17,9 +17,9 @@ argocd login localhost:8080
 
 env1="dev"
 
-export GITLAB_USERNAME="user"
-export GITLAB_USER_TOKEN="glpat-g6JGtuzuRAMZUCyzE7eu"
-export GITLAB_REPO="https://gitlab.srv5.lan/devops/education/k8s/argocd/helm-test.git"
+export GITLAB_USERNAME=""
+export GITLAB_USER_TOKEN=""
+export GITLAB_REPO=""
 
 export ARGOCD_APP_NAME="nginx"
 export GITLAB_PATH_2_CHECK="nginx/charts"
