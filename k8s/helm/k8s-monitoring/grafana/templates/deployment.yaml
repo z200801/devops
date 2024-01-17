@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: {{ .Release.Namespace}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          # image: bitnami/grafana
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin-credentials
+                  key: admin-username
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin-credentials
+                  key: admin-password
+          volumeMounts:
+            - name: grafana-config
+              mountPath: /etc/grafana
+            - name: grafana-config-datasource
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: grafana-config-dashboards
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: grafana-dashboards
+              mountPath: /var/lib/grafana/dashboards/default
+      volumes:
+        - name: grafana-config
+          configMap:
+            name: grafana-config
+        - name: grafana-config-datasource
+          configMap:
+            name: grafana-config-datasource
+        - name: grafana-config-dashboards
+          configMap:
+            name: grafana-config-dashboards
+        - name: grafana-dashboards
+          configMap:
+            name: grafana-dashboards

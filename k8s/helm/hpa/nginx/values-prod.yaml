@@ -1,0 +1,13 @@
+namespace: 
+ name: prod
+
+replicas:
+  count: 3
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 70
+  pps: "3k" # packets-per-seconds

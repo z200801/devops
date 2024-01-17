@@ -1,0 +1,39 @@
+# values.yaml
+
+grafana:
+  adminCredentialsSecretName: grafana-admin-credentials
+  service:
+    type: LoadBalancer
+  ingress:
+    enabled: true
+    hosts:
+      - grafana
+    annotations:
+      kubernetes.io/ingress.class: "nginx"
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+dashboards:
+  default:
+    default-dashboard:
+      # file: dashboards/13332_rev12.json
+      file: dashboards/dashboard-1000.json
+      datasource: Prometheus
+    prometheus-stats:
+      gnetId: 2
+      revision: 2
+      datasource: Prometheus
+  # dashboardsConfigMaps:
+  #   fid: "default-dashboard"
+  #   default: grafana-config-dashboards

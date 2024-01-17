@@ -1,0 +1,14 @@
+app:
+  name: nginx
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+container:
+  image: nginx:latest
+  name: nginx
+
+replicas:
+  count: 1

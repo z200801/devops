@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.app.name }}-deployment-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.replicas.count }}
+  selector:
+    matchLabels:
+      app:  {{ .Values.app.name }}-deployment-{{ .Release.Namespace }} # nginx
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.app.name }}-deployment-{{ .Release.Namespace }} # nginx
+    spec:
+      containers:
+      - name:  {{ .Values.container.name }}
+        image: {{ .Values.container.image }}
+        resources:
+          {{ toYaml .Values.resources | nindent 12 }}
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: {{ .Values.app.name }}-volume
+          mountPath: /etc/nginx/conf.d
+        - name: htmldir
+          mountPath: /usr/share/nginx/html
+      initContainers:
+      - name: install
+        image: busybox:latest
+        command: ['/bin/sh']
+#        args: ['-c','echo "<html><body><h1>Hostname pod is [$(hostname)]</h1></body></html>">/mnt/index.html']
+        args: ['-c','echo "<html><body><h1>Pod Name is [${POD_NAME}]</h1></body></html>">/mnt/index.html']
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: htmldir
+          mountPath: "/mnt"
+      dnsPolicy: Default
+      volumes:
+      - name: htmldir
+        emptyDir: {}
+      - name: {{ .Values.app.name }}-volume
+        configMap:
+          name: {{ .Values.app.name }}-configmap

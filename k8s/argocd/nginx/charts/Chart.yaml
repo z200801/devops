@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nginx
+description: Nginx server for test GitOps ArgoCD
+type: application
+version: 0.1.0 # Version Helm ver=$(helm create Chart-auto && grep -Po "^version:\x20+\K\S+" Chart-auto/Chart.yaml)
+appVersion: "0.0.1"

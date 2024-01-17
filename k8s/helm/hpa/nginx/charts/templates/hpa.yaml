@@ -1,0 +1,34 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.app.name }}-hpa-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+  - resource:
+        name: cpu
+        target:
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+          type: Utilization
+    type: Resource
+  - resource:
+        name: memory
+        target:
+          averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
+          type: Utilization
+    type: Resource
+  - type: Pods
+    pods:
+      metric:
+        name: packets-per-second
+      target:
+        type: AverageValue
+        averageValue: {{ .Values.autoscaling.pps}}
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.app.name }}-deployment-{{ .Release.Namespace }}
+status: {}
+

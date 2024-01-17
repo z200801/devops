@@ -1,0 +1,15 @@
+namespace:
+  name: stage
+
+replicas:
+  count: 2
+
+vpa:
+  resources:
+    minAllowed:
+      cpu: "50m"
+      memory: "32Mi"
+    maxAllowed:
+      cpu: "100m"
+      memory: "64Mi"
+ 

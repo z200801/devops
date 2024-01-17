@@ -1,0 +1,13 @@
+namespace:
+  name: stage
+
+replicas:
+  count: 2
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 20
+  targetMemoryUtilizationPercentage: 20
+  pps: "2k" # packets-per-seconds

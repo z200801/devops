@@ -1,0 +1,24 @@
+app:
+  name: nginx
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+container:
+  image: nginx:latest
+  name: nginx
+
+replicas:
+  count: 1
+
+vpa:
+  resources:
+    minAllowed:
+      cpu: "25m"
+      memory: "16Mi"
+    maxAllowed:
+      cpu: "50m"
+      memory: "32Mi"
+ 

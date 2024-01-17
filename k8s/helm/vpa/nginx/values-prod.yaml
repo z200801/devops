@@ -1,0 +1,15 @@
+namespace: 
+ name: prod
+
+replicas:
+  count: 3
+
+vpa:
+  resources:
+    minAllowed:
+      cpu: "100m"
+      memory: "64Mi"
+    maxAllowed:
+      cpu: "150m"
+      memory: "128Mi"
+ 
