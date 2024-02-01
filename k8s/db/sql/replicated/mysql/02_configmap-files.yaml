@@ -1,0 +1,121 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-files
+  namespace: mysql
+  labels:
+    app: mysql
+    app.kubernetes.io/name: mysql
+data:
+  master.cnf: |
+    [mysqld]
+    
+    server-id    = 1
+    log-bin      = mysql-bin
+    binlog-do-db = MYSQL_REPLICATION_DATABASE
+    binlog-ignore-db = mysql
+    binlog-format = ROW
+    bind-address = 0.0.0.0
+
+    log_slave_updates
+    sync_binlog       = 1
+    log_error         = mysql-error.log
+  
+  slave.cnf: |
+    [mysqld]
+
+    server-id        = 2
+    log-bin          = mysql-bin
+    relay-log        = mysql-relay-bin
+    relay-log-index  = mysql-relay-bin.index
+    replicate-do-db  = MYSQL_REPLICATION_DATABASE
+    replicate-ignore-db = mysql
+    bind-address = 0.0.0.0
+
+    ;log_slave_updates
+    sync_binlog      = 1
+    binlog_format    = ROW
+    read_only        = 1
+  
+  init_db-master.sql.tpl: |
+    CREATE DATABASE IF NOT EXISTS ${MYSQL_REPLICATION_DATABASE};
+    SHOW MASTER STATUS\G;
+    CREATE USER IF NOT EXISTS '${MYSQL_REPLICATION_USER}'@'%' IDENTIFIED WITH mysql_native_password BY '${MYSQL_REPLICATION_PASSWORD}';
+    GRANT REPLICATION SLAVE ON *.* TO '${MYSQL_REPLICATION_USER}'@'%' identified by '${MYSQL_REPLICATION_PASSWORD}';
+    FLUSH PRIVILEGES;
+    create table IF NOT EXISTS ${MYSQL_DATABASE_REPLICATED}.tb1 (q1 VARCHAR(50));
+
+  init_db-slave.sql.tpl: |
+    CREATE DATABASE IF NOT EXISTS ${MYSQL_REPLICATION_DATABASE};
+    STOP SLAVE;
+    CHANGE MASTER TO
+    MASTER_HOST='${MYSQL_MASTER_HOST}',
+    MASTER_PORT=3306,
+    MASTER_USER='${MYSQL_REPLICATION_USER}',
+    MASTER_PASSWORD='${MYSQL_REPLICATION_PASSWORD}',
+    MASTER_LOG_FILE='mysql-bin.000003',
+    MASTER_LOG_POS=1;
+    START SLAVE;
+    SHOW SLAVE STATUS\G;
+
+  post-start.sh: |
+    #!/bin/sh
+    cd /etc/mysql/conf.d
+    echo "Container:postStart: [${_srv}] [$(date +%Y%m%d-%H%M)] [${POD_NAME}][${POD_IP}]" >>/etc/mysql/conf.d/info.txt
+    /bin/sh /etc/mysql/conf.d/init_db.sh /etc/mysql/conf.d/init_db.sql.tpl
+  
+  init_db.sh: |
+    #!/bin/bash
+    
+    #### Functions
+    __envsubst(){
+      
+      if [ -z "${1}" ]; then return 1; fi
+      
+      file_input="${1}"
+      str=$(cat ${file_input})
+      env_val=$(echo "${str}" |grep -o '\${[^}]*}'|sed 's/\${\(.*\)}/\1/')
+      
+      for i in ${env_val}; do 
+       if  printenv "${i}" >/dev/null; then
+        str=$(echo "${str}"|sed "s/\${${i}}/$(printenv ${i})/g"); fi
+      done
+      echo "${str}"
+    }
+    
+    __create_sql_from_template(){
+    init_sql_template="${1}"
+    
+    init_sql="init_db.sql"
+        
+    __envsubst "${init_sql_template}" >"${init_sql}"
+
+    mysql -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} < "${init_sql}" 2>/dev/null
+    }
+
+    __chk_mysql_up(){
+     mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} 2>/dev/null 1>/dev/null
+     return ${?}
+    }
+
+    __wait_mysql(){
+    TIMEOUT=30
+    SECONDS=0
+    while [ ${SECONDS} -lt ${TIMEOUT} ]; do
+      if __chk_mysql_up; then return 0; fi
+      SECONDS=$(( SECONDS + 1 ))
+      sleep 1
+    done
+    return 1
+    }
+  
+    #### Main
+    export MYSQL_MASTER_HOST="$(echo $HOSTNAME|sed 's/-[0-9]*$//')-0.mysql-svc"
+    if [ -z "${1}" ]; then echo "Error. Not set input file. Exit"; exit 1; fi
+    if [ ! -e "${1}" ] || [ ! -r "${1}" ]; then echo "Error. Input file not exist or read. Exit"; exit 1; fi
+    #if ! __wait_mysql; then echo "Error. Not running mysql. Exit"; exit 1; fi
+    if [ -n "${2}" ] && [ -d "${2}" ] && [ -w "${2}" ]; then dst_dir="${2}"; fi
+  
+    __create_sql_from_template "${1}"
+    # exit 0
+

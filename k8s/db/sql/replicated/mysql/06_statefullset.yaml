@@ -1,0 +1,162 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-set
+  namespace: mysql
+spec:
+  selector:
+    matchLabels:
+      app: mysql-pod
+  serviceName: "mysql-svc"
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: mysql-pod
+    spec:
+      dnsPolicy: "ClusterFirst"
+      terminationGracePeriodSeconds: 10
+      initContainers:
+      - name: mysql-init
+        image: alpine:latest
+        command: ['/bin/sh', '-c']
+        args:
+          - |
+            #!/bin/sh
+
+            _srv="slave"
+            _server_id=$(echo $HOSTNAME |grep -oEe "[0-9]+$")
+            if [ ${_server_id} = 0 ]; then _srv="master"; fi
+            echo "_srv=[${_srv}]"
+            echo "InitContainer: [${_srv}] [$(date +%Y%m%d-%H%M)] [${POD_NAME}][${POD_IP}]" >>/mnt/mod/info.txt
+            cp /mnt/src/init_db-"${_srv}".sql.tpl /mnt/mod/init_db.sql.tpl
+            cp /mnt/src/init_db.sh /mnt/mod/init_db.sh
+            cp /mnt/src/"${_srv}".cnf /mnt/mod/server.cnf
+            cp /mnt/src/post-start.sh /mnt/mod
+            sed -i "s/MYSQL_REPLICATION_DATABASE/${MYSQL_REPLICATION_DATABASE}/g" /mnt/mod/server.cnf
+            cd /mnt/mod
+            /bin/sh init_db.sh init_db.sql.tpl
+            cp init_db.sql /mnt/initdb/initdb.sql
+            exit 0
+        volumeMounts:
+          - name:  config-mod
+            mountPath: /mnt/mod
+          - name: config-src
+            mountPath: /mnt/src
+          - name: initdb
+            mountPath: /mnt/initdb
+        resources:
+          requests:
+            cpu: '0.02'
+            memory: '64Mi'
+          limits:
+            cpu: '0.02'
+            memory: '128Mi'
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MYSQL_REPLICATION_DATABASE
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-values
+                key: MYSQL_DATABASE
+          - name: MYSQL_REPLICATION_USER
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-values
+                key: MYSQL_REPLICATION_USER
+          - name: MYSQL_REPLICATION_PASSWORD
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-values
+                key: MYSQL_REPLICATION_PASSWORD
+      containers:
+      - name: mysql
+        image: mysql:5.7
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - name: mysql-store
+          mountPath: /var/lib/mysql
+        - name:  config-mod
+          mountPath: /etc/mysql/conf.d
+        - name: initdb
+          mountPath: /docker-entrypoint-initdb.d
+        resources:
+          limits:
+            cpu: '0.1'
+            memory: '750Mi'
+          requests:
+            cpu: '0.1'
+            memory: '512Mi'
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MYSQL_MASTER_HOST
+            value: mysql-svc
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-values
+                key: MYSQL_MASTER_ROOT_PASSWORD
+          - name: MYSQL_REPLICATION_DATABASE
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-values
+                key: MYSQL_DATABASE
+          - name: MYSQL_USER
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-values
+                key: MYSQL_MASTER_USER
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-values
+                key: MYSQL_MASTER_USER_PASSWORD
+          - name: MYSQL_REPLICATION_USER
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-values
+                key: MYSQL_REPLICATION_USER
+          - name: MYSQL_REPLICATION_PASSWORD
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-values
+                key: MYSQL_REPLICATION_PASSWORD
+          - name: TZ
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-values
+                key: TZ
+      volumes:
+      - name: config-src
+        configMap:
+          name: mysql-files
+      - name: config-mod
+        emptyDir: {}
+      - name: share-data
+        emptyDir: {}
+      - name: initdb
+        emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-store
+      namespace: mysql
+    spec:
+     accessModes: ["ReadWriteOnce"]
+     resources:
+        requests:
+          storage: 128M
