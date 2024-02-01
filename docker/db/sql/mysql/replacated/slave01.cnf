@@ -1,0 +1,14 @@
+[mysqld]
+
+server-id        = 2
+log-bin          = mysql-bin
+relay-log        = mysql-relay-bin
+relay-log-index  = mysql-relay-bin.index
+replicate-do-db  = mydatabase
+replicate-ignore-db = mysql
+bind-address = 0.0.0.0
+
+;log_slave_updates
+sync_binlog      = 1
+binlog_format    = ROW
+read_only        = 1

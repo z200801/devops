@@ -1,0 +1,11 @@
+[mysqld]
+server-id    = 1
+log-bin      = mysql-bin
+binlog-do-db = mydatabase
+binlog-ignore-db = mysql
+binlog-format = ROW
+bind-address = 0.0.0.0
+
+log_slave_updates
+sync_binlog       = 1
+log_error         = mysql-error.log

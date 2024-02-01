@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  master:
+    image: mysql:5.7
+    container_name: mysql-master
+    restart: unless-stopped
+    env_file: master.env
+    environment:
+      - TZ:${TZ}
+      - MYSQL_USER:${MYSQL_MASTER_USER}
+      - MYSQL_PASSWORD:${MYSQL_MASTER_PASSWORD}
+      - MYSQL_ROOT_PASSWORD:${MYSQL_MASTER_ROOT_PASSWORD}
+      - MYSQL_REPLICATION_USER:${MYSQL_MASTER_REPLICATION_USER}
+      - MYSQL_REPLICATION_PASSWORD:${MYSQL_MASTER_REPLICATION_PASSWORD}
+    command:
+      --default-authentication-plugin=mysql_native_password
+      --sql_mode=NO_ENGINE_SUBSTITUTION
+    cap_add:
+      - all
+    ports:
+      - "43306:3306"
+    expose:
+      - '3306'
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: '512M'
+    volumes:
+      - ./master.cnf:/etc/mysql/conf.d/my.cnf
+      - mysql8-db-master:/var/lib/mysql
+    networks:
+      - mysql_network
+
+  slave01:
+    image: mysql:5.7
+    container_name: mysql-slave01
+    depends_on:
+      - master
+    restart: unless-stopped
+    env_file: slave.env
+    environment:
+      - TZ:${TZ}
+      - MYSQL_USER:${MYSQL_SLAVE_USER}
+      - MYSQL_PASSWORD:${MYSQL_SLAVE_PASSWORD}
+      - MYSQL_ROOT_PASSWORD:${MYSQL_SLAVE_ROOT_PASSWORD}
+      - MYSQL_REPLICATION_USER:${MYSQL_SLAVE_REPLICATION_USER}
+      - MYSQL_REPLICATION_PASSWORD:${MYSQL_SLAVE_REPLICATION_PASSWORD}
+    command:
+      --default-authentication-plugin=mysql_native_password
+      --sql_mode=NO_ENGINE_SUBSTITUTION
+      --log-bin=mysql-bin
+      --server-id=2
+    cap_add:
+      - all
+    expose:
+      - '3306'
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: '512M'
+    volumes:
+      - ./slave01.cnf:/etc/mysql/conf.d/my.cnf
+      - mysql8-db-slave01:/var/lib/mysql
+    networks:
+      - mysql_network
+
+networks:
+  mysql_network:
+volumes:
+  mysql8-db-master:
+  mysql8-db-slave01:
