@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  redis:
+    image: "redis:latest"
+    ports:
+      - "6379:6379"
+    expose:
+      - '6379'
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: '512M'
+    volumes:
+      - ./redis:/data
+    networks:
+      - redis_network
+
+networks:
+  redis_network:
+#volumes:
+#  redis:
+
