@@ -1,5 +1,3 @@
-[[_TOC_]]
-
 # Terraform + AWS. 
 
 # About
@@ -50,13 +48,14 @@ ssh -i "${ec2_ssh_key_file}" ubuntu@"${ec2_ip}"
 
 # Tune
 `var.tf`
- inst_1
+
+inst_1:
  - `type`         - AWS EC2 instance type. t2.micro - is free tier
  - `key_name`     - Existing SSH user in AWS 
  - `root_vl_size` - root directory size
  - `root_vl_type` - gp2, gp3 ...
  - `ebs_vl_XXXXX` - EBS type, size, name
 
- allowed_ip_22
+allowed_ip_22:
  - `default` - whitelist ip for connect to ssh (22) port. As list
  
