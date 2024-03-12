@@ -18,6 +18,11 @@ Need install:
 
 # Usage:
 
+## Init
+```shell
+terraform init
+```
+
 ## Format and validate
 ```shell
 terraform fmt 
