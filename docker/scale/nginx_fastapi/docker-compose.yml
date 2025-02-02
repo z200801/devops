@@ -1,0 +1,51 @@
+---
+services:
+  # frontend:
+  #   image: nginx:alpine
+  #   volumes: [./frontend:/usr/share/nginx/html:ro]
+  #   environment:
+  #     - BACKEND_HOST: http://backend:80
+  #   networks: [app-net]
+  #   ports: [127.0.0.1:8080:80]
+  nginx:
+    image: nginx:alpine-slim
+    volumes: [./nginx/nginx.conf:/etc/nginx/nginx.conf:ro]
+    depends_on: [backend]
+    networks: [app-net]
+    ports: [127.0.0.1:8000:80]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 16M
+        reservations:
+          cpus: '0.25'
+          memory: 8M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 10s
+  backend:
+    image: tiangolo/uvicorn-gunicorn-fastapi:python3.11-slim
+    volumes: [./backend:/app]
+    networks: [app-net]
+    deploy:
+      mode: replicaetd
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 196M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 10s
+    environment: [BACKEND_HOST=0.0.0.0]
+networks:
+  app-net:
+    driver: bridge

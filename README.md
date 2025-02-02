@@ -1,9 +1,12 @@
 # My examples for DevOps
 
-```
-├── aws-cli  - AWS cli commands
-├── docker - docker examples
-├── k8s - Kubernetes examples
-├── packer - Packer examples
-└── terraform - Terraform examples
+```sh
+├── aws-cli     - AWS cli commands
+├── develop     - some develop code
+├── docker      - docker examples
+├── k8s         - Kubernetes examples
+├── packer      - Packer examples
+├── roadmap     - roadmap for DevOps
+├── sysops      - code for sysops
+└── terraform   - Terraform examples
 ```

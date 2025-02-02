@@ -1,0 +1,54 @@
+services:
+  nginx:
+    image: nginx:${NGINX_VERSION}
+    volumes: 
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on: 
+      - backend
+    networks: 
+      - app-net
+    ports: 
+      - "127.0.0.1:${APP_PORT}:80"
+    deploy:
+      resources:
+        limits:
+          cpus: "${NGINX_CPU_LIMIT}"
+          memory: "${NGINX_MEM_LIMIT}"
+        reservations:
+          cpus: "${NGINX_CPU_RESERVATION}"
+          memory: "${NGINX_MEM_RESERVATION}"
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 10s
+
+  backend:
+    image: tiangolo/uvicorn-gunicorn-fastapi:${BACKEND_VERSION}
+    volumes: 
+      - ./backend:/app
+    networks: 
+      - app-net
+    deploy:
+      mode: replicated
+      replicas: ${BACKEND_REPLICAS}
+      resources:
+        limits:
+          cpus: "${BACKEND_CPU_LIMIT}"
+          memory: "${BACKEND_MEM_LIMIT}"
+        reservations:
+          cpus: "${BACKEND_CPU_RESERVATION}"
+          memory: "${BACKEND_MEM_RESERVATION}"
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 10s
+    environment: 
+      - BACKEND_HOST=${BACKEND_HOST}
+      - BACKEND_PORT=${BACKEND_PORT}
+      - STACK_VERSION=${STACK_VERSION}
+
+networks:
+  app-net:
+    driver: bridge
