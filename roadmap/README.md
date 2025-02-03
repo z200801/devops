@@ -46,9 +46,7 @@
 
 ##### Практичні завдання
 
-[[modules/linux-basics.md]]
-
-[linux-basic](modules/linux-basic.md)
+(linux-basics.md)[modules/linux-basics.md]
 
 ----
 
@@ -72,7 +70,7 @@
 
 ##### Практичні завдання
 
-[[modules/networking.md]]
+(networking.md)[modules/networking.md]
 
 #### Блок: Vagrant
 
@@ -225,7 +223,7 @@
 
 ##### Практичні завдання
 
-[[modules/vagrant-guide.md]]
+(vagrant-guide.md)[modules/vagrant-guide.md]
 
 ### Мережі
 
@@ -237,7 +235,7 @@
 
 ##### Практичні завдання
 
-[[modules/networking.md]]
+(networking.md)[modules/networking.md]
 
 #### Блок 3: Git
 
@@ -272,7 +270,7 @@
 
 ##### Практичні завдання
 
-[[modules/git-guide.md]]
+(git-guide.md)[modules/git-guide.md]
 
 ## Етап 2: Програмування та автоматизація (2-3 місяці)
 
@@ -306,7 +304,7 @@
 
 ## Практичні завдання
 
-[[modules/python-deovps.md]]
+(python-deovps.md)[modules/python-deovps.md]
 
 ### Блок 5: Infrastructure as Code
 
@@ -332,14 +330,14 @@
 
 ##### Практичні завдання
 
-[[modules/iac-guide.md]]
+(iac-guide.md)[modules/iac-guide.md]
 
 ### SQL та Бази Даних
 
 #### Основи SQL
 
 1. Базові команди:
-[[modules/database-guide.md]]
+(database-guide.md)[modules/database-guide.md]
 
 2. Практичні завдання:
    - Створити схему для e-commerce системи
@@ -349,7 +347,7 @@
 
 ##### Практичні завдання
 
-[[modules/sql-commands.md]]
+(sql-commands.md)[modules/sql-commands.md]
 
 #### Порівняння MySQL та PostgreSQL
 
@@ -431,7 +429,7 @@
 
 ##### Практичні завдання
 
-[[modules/docker-guide.md]]
+(docker-guide.md)[modules/docker-guide.md]
 
 ### Блок 7: Kubernetes
 
@@ -466,7 +464,7 @@
 
 ##### Практичні завдання
 
-[[modules/kubernetes-guide.md]]
+(kubernetes-guide.md)[modules/kubernetes-guide.md]
 
 ## Етап 4: CI/CD та моніторинг (2-3 місяці)
 
@@ -495,7 +493,7 @@
 
 ##### Практичні завдання
 
-[[modules/cicd-complete.md]]
+(cicd-complete.md)[modules/cicd-complete.md]
 
 ### Блок 9: Моніторинг
 
@@ -529,7 +527,7 @@
 
 ##### Практичні завдання
 
-[[modules/monitoring-guide.md]]
+(monitoring-guide.md)[modules/monitoring-guide.md]
 
 ## Практичні проекти
 
