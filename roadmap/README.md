@@ -48,7 +48,8 @@
 
 [[modules/linux-basics.md]]
 
-(linux-basic)[modules/linux-basic.md]
+(linux-basic)[[modules/linux-basic.md]]
+
 ----
 
 #### Блок 2: Мережі
