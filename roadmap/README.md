@@ -50,6 +50,16 @@
 
 ----
 
+##### Регулярні вираз - regexp
+
+[regex-theory.md](modules/regex-theory.md)
+
+##### Практичні завдання
+
+[regex-guide.md](modules/regex-guide.md)
+
+----
+
 #### Блок 2: Мережі
 
 1. Базова конфігурація:
