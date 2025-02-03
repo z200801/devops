@@ -85,37 +85,7 @@
 
 1. Базове налаштування:
 
-   ```bash
-   # Встановлення Vagrant
-   sudo apt install vagrant
-   
-   # Встановлення провайдерів
-   sudo apt install virtualbox
-   sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
-   
-   # Встановлення плагіна для libvirt
-   vagrant plugin install vagrant-libvirt
-   ```
-
 2. Практичні завдання з VirtualBox:
-
-   ```ruby
-   # Приклад базового Vagrantfile для VirtualBox
-   Vagrant.configure("2") do |config|
-     config.vm.box = "ubuntu/focal64"
-     config.vm.provider "virtualbox" do |vb|
-       vb.memory = "2048"
-       vb.cpus = 2
-     end
-     
-     config.vm.network "private_network", ip: "192.168.56.10"
-     
-     config.vm.provision "shell", inline: <<-SHELL
-       apt-get update
-       apt-get install -y nginx
-     SHELL
-   end
-   ```
 
    - Створити VM з Ubuntu 20.04
    - Налаштувати порти та мережі
@@ -123,81 +93,17 @@
 
 3. Практичні завдання з Libvirt:
 
-   ```ruby
-   # Приклад Vagrantfile для Libvirt
-   Vagrant.configure("2") do |config|
-     config.vm.box = "generic/ubuntu2004"
-     config.vm.provider :libvirt do |libvirt|
-       libvirt.memory = 2048
-       libvirt.cpus = 2
-       libvirt.nested = true
-     end
-     
-     config.vm.network "private_network", ip: "192.168.121.10"
-   end
-   ```
-
    - Налаштувати Libvirt провайдер
    - Створити VM з використанням KVM
    - Налаштувати мережеві мости
 
 4. Multi-machine оточення:
 
-   ```ruby
-   # Приклад multi-machine Vagrantfile
-   Vagrant.configure("2") do |config|
-     config.vm.define "web" do |web|
-       web.vm.box = "ubuntu/focal64"
-       web.vm.network "private_network", ip: "192.168.56.10"
-       web.vm.provision "shell", inline: <<-SHELL
-         apt-get update
-         apt-get install -y nginx
-       SHELL
-     end
-   
-     config.vm.define "db" do |db|
-       db.vm.box = "ubuntu/focal64"
-       db.vm.network "private_network", ip: "192.168.56.11"
-       db.vm.provision "shell", inline: <<-SHELL
-         apt-get update
-         apt-get install -y postgresql
-       SHELL
-     end
-   end
-   ```
-
    - Створити кластер з веб-сервером та базою даних
    - Налаштувати мережеву взаємодію між VM
    - Автоматизувати налаштування сервісів
 
 5. Ansible provisioning:
-
-   ```ruby
-   # Приклад Vagrantfile з Ansible provisioner
-   Vagrant.configure("2") do |config|
-     config.vm.box = "ubuntu/focal64"
-     
-     config.vm.provision "ansible" do |ansible|
-       ansible.playbook = "playbook.yml"
-       ansible.become = true
-     end
-   end
-   ```
-
-   ```yaml
-   # playbook.yml
-   ---
-   - hosts: all
-     tasks:
-       - name: Update apt cache
-         apt:
-           update_cache: yes
-           
-       - name: Install required packages
-         apt:
-           name: ['nginx', 'curl', 'git']
-           state: present
-   ```
 
    - Створити базовий плейбук
    - Налаштувати ролі
