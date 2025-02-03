@@ -46,7 +46,7 @@
 
 ##### Практичні завдання
 
-(linux-basics.md)[modules/linux-basics.md]
+[linux-basics.md](modules/linux-basics.md)
 
 ----
 
@@ -70,7 +70,7 @@
 
 ##### Практичні завдання
 
-(networking.md)[modules/networking.md]
+[networking.md](modules/networking.md)
 
 #### Блок: Vagrant
 
@@ -223,7 +223,7 @@
 
 ##### Практичні завдання
 
-(vagrant-guide.md)[modules/vagrant-guide.md]
+[vagrant-guide.md](modules/vagrant-guide.md)
 
 ### Мережі
 
@@ -235,7 +235,7 @@
 
 ##### Практичні завдання
 
-(networking.md)[modules/networking.md]
+[networking.md](modules/networking.md)
 
 #### Блок 3: Git
 
@@ -270,7 +270,7 @@
 
 ##### Практичні завдання
 
-(git-guide.md)[modules/git-guide.md]
+[git-guide.md](modules/git-guide.md)
 
 ## Етап 2: Програмування та автоматизація (2-3 місяці)
 
@@ -304,7 +304,7 @@
 
 ## Практичні завдання
 
-(python-deovps.md)[modules/python-deovps.md]
+[python-deovps.md](modules/python-deovps.md)
 
 ### Блок 5: Infrastructure as Code
 
@@ -330,14 +330,14 @@
 
 ##### Практичні завдання
 
-(iac-guide.md)[modules/iac-guide.md]
+[iac-guide.md](modules/iac-guide.md)
 
 ### SQL та Бази Даних
 
 #### Основи SQL
 
 1. Базові команди:
-(database-guide.md)[modules/database-guide.md]
+[database-guide.md](modules/database-guide.md)
 
 2. Практичні завдання:
    - Створити схему для e-commerce системи
@@ -347,7 +347,7 @@
 
 ##### Практичні завдання
 
-(sql-commands.md)[modules/sql-commands.md]
+[sql-commands.md](modules/sql-commands.md)
 
 #### Порівняння MySQL та PostgreSQL
 
@@ -429,7 +429,7 @@
 
 ##### Практичні завдання
 
-(docker-guide.md)[modules/docker-guide.md]
+[docker-guide.md](modules/docker-guide.md)
 
 ### Блок 7: Kubernetes
 
@@ -464,7 +464,7 @@
 
 ##### Практичні завдання
 
-(kubernetes-guide.md)[modules/kubernetes-guide.md]
+[kubernetes-guide.md](modules/kubernetes-guide.md)
 
 ## Етап 4: CI/CD та моніторинг (2-3 місяці)
 
@@ -493,7 +493,7 @@
 
 ##### Практичні завдання
 
-(cicd-complete.md)[modules/cicd-complete.md]
+[cicd-complete.md](modules/cicd-complete.md)
 
 ### Блок 9: Моніторинг
 
@@ -527,7 +527,7 @@
 
 ##### Практичні завдання
 
-(monitoring-guide.md)[modules/monitoring-guide.md]
+[monitoring-guide.md](modules/monitoring-guide.md)
 
 ## Практичні проекти
 
