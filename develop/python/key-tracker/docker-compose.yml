@@ -1,0 +1,98 @@
+---
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    expose: ["5432"]
+    environment:
+      - POSTGRES_DB=db_keys
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=dbrootpassword
+      - PGPASSWORD=dbrootpassword
+      - PGUSER=postgres
+    volumes:
+      - db_postgres_data:/var/lib/postgresql/data
+      - ./db_init/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - keys-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 2s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: '96M'
+        reservations:
+          cpus: '0.2'
+          memory: '64M'    
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose: ['8000']
+    # volumes: [./backend:/app]
+    depends_on:
+      db: 
+        condition: service_healthy
+        restart: true
+    env_file:
+      - ./backend/.env
+    environment: 
+      - PYTHONUNBUFFERED=1
+    networks:
+      - keys-network
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:8000/]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 96M
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=http://localhost/api
+    restart: unless-stopped
+    ports: [18180:80]
+    environment:
+      - REACT_APP_API_URL=/api
+    depends_on:
+      backend: 
+        condition: service_started
+        restart: true
+    networks:
+      - keys-network
+    configs:
+      - source: nginx_conf
+        target: /etc/nginx/conf.d/default.conf:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 12M
+        reservations:
+          cpus: '0.1'
+          memory: 8M
+volumes:
+  db_postgres_data:
+networks:
+  keys-network:
+    driver: bridge
+configs:
+  nginx_conf:
+    file: frontend/nginx.conf
+

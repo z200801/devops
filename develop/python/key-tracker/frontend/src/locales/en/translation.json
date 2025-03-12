@@ -1,0 +1,266 @@
+{
+  "app": {
+    "title": "Key Tracker",
+    "footer": "© 2025 Key Tracker App. z200801@gmail.com"
+  },
+  "menu": {
+    "home": "Home",
+    "sites": "Sites",
+    "keys": "Keys",
+    "issuedKeys": "Issued Keys",
+    "history": "History",
+    "backup": "Backup"
+  },
+  "dashboard": {
+    "title": "Key Tracker Dashboard",
+    "cards": {
+      "sites": "Sites",
+      "keys": "Keys",
+      "issuedKeys": "Issued Keys"
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "addSite": "Add Site",
+      "addKey": "Add Key",
+      "issueKey": "Issue Key",
+      "returnKey": "Return Key",
+      "backup": "Backup"
+    },
+    "about": {
+      "title": "About the System",
+      "text1": "Key Tracker System allows you to track keys from different sites, control their issuance and return, and maintain a complete history of key movement.",
+      "text2": "Use the navigation menu to access different system functions."
+    }
+  },
+  "sites": {
+    "title": "Sites",
+    "addSite": "Add Site",
+    "filter": "Filter (enter text or regular expression)",
+    "filterMode": {
+      "regexp": "Regular expression is used",
+      "simple": "Simple text search is used"
+    },
+    "loading": "Loading...",
+    "noSites": "No sites matching the filter.",
+    "columns": {
+      "code": "Site Code",
+      "address": "Address",
+      "notes": "Notes",
+      "actions": "Actions"
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "confirmDelete": "Are you sure you want to delete site {siteCode}?"
+  },
+  "keys": {
+    "title": "Keys",
+    "addKey": "Add Key",
+    "filter": "Filter (enter text or regular expression)",
+    "filterMode": {
+      "regexp": "Regular expression is used",
+      "simple": "Simple text search is used"
+    },
+    "loading": "Loading...",
+    "noKeys": "No keys matching the filter.",
+    "columns": {
+      "id": "ID",
+      "site": "Site",
+      "description": "Description",
+      "keyCount": "Key Count",
+      "setCount": "Set Count",
+      "status": "Status",
+      "notes": "Notes",
+      "actions": "Actions"
+    },
+    "status": {
+      "issued": "Issued",
+      "available": "Available"
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "confirmDelete": "Are you sure you want to delete key #{keyId}?"
+  },
+  "issuedKeys": {
+    "title": "Issued Keys",
+    "issueKey": "Issue Key",
+    "returnKey": "Return Key",
+    "filter": "Filter (enter text or regular expression)",
+    "filterMode": {
+      "regexp": "Regular expression is used",
+      "simple": "Simple text search is used"
+    },
+    "loading": "Loading...",
+    "noKeys": "No issued keys matching the filter.",
+    "columns": {
+      "site": "Site",
+      "description": "Key Description",
+      "issuedTo": "Issued To",
+      "issuedAt": "Issue Date and Time",
+      "actions": "Actions"
+    },
+    "actions": {
+      "return": "Return"
+    }
+  },
+  "history": {
+    "title": "Key History",
+    "filterBySite": "Filter by Site",
+    "allSites": "All Sites",
+    "filter": "Filter (enter text or regular expression)",
+    "filterMode": {
+      "regexp": "Regular expression is used",
+      "simple": "Simple text search is used"
+    },
+    "loading": "Loading...",
+    "noHistory": "No history matching the filter.",
+    "columns": {
+      "id": "ID",
+      "site": "Site",
+      "description": "Key Description",
+      "issuedTo": "Issued To",
+      "issuedAt": "Issue Date and Time",
+      "returnedAt": "Return Date and Time",
+      "notes": "Notes",
+      "actions": "Actions"
+    },
+    "notReturned": "Not Returned",
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "editModal": {
+      "title": "Edit History Entry",
+      "issuedTo": "Issued To",
+      "issuedAt": "Issue Date and Time",
+      "returnedAt": "Return Date and Time",
+      "notes": "Notes",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving..."
+    },
+    "deleteModal": {
+      "title": "Confirm Deletion",
+      "warning": "This action cannot be undone!",
+      "message": "Do you really want to delete history entry #{historyId} for key {description} (site {siteCode})?",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "deleting": "Deleting..."
+    }
+  },
+  "backup": {
+    "title": "Backup and Restore",
+    "backupCard": {
+      "title": "Create Backup",
+      "description": "Download a backup of all data in YAML format. This backup contains information about all sites, keys, and history.",
+      "button": "Download Backup",
+      "creating": "Creating..."
+    },
+    "restoreCard": {
+      "title": "Restore from Backup",
+      "description": "Restore data from a previously created backup",
+      "warning": "WARNING! All current data will be replaced!",
+      "selectFile": "Select a file in YAML format (.yaml or .yml)",
+      "button": "Restore from Backup",
+      "restoring": "Restoring..."
+    },
+    "clearDatabase": {
+      "title": "Danger Zone",
+      "description": "This action will delete all data from the database without the possibility of recovery. Make sure you have a backup before continuing.",
+      "button": "Clear Database"
+    },
+    "clearModal": {
+      "title": "Confirm Database Clearing",
+      "warning": "WARNING! This action is irreversible!",
+      "message": "You are about to delete ALL data from the database, including:",
+      "items": {
+        "sites": "All sites",
+        "keys": "All keys",
+        "history": "All issue and return history"
+      },
+      "confirmation": "Make sure you have an up-to-date backup if the data might be needed in the future.",
+      "question": "Do you really want to continue?",
+      "cancel": "Cancel",
+      "confirm": "Yes, clear all data",
+      "clearing": "Clearing..."
+    },
+    "success": "Backup successfully downloaded!",
+    "restoreSuccess": "Data successfully restored from backup!",
+    "clearSuccess": "Database successfully cleared!",
+    "error": "Error creating backup.",
+    "restoreError": "Error restoring data. Check the file format.",
+    "clearError": "Error clearing database.",
+    "selectFileError": "Please select a backup file."
+  },
+  "siteForm": {
+    "addTitle": "Add New Site",
+    "editTitle": "Edit Site",
+    "fields": {
+      "code": "Site Code",
+      "address": "Address",
+      "notes": "Notes"
+    },
+    "buttons": {
+      "save": "Save",
+      "saving": "Saving...",
+      "cancel": "Cancel"
+    }
+  },
+  "keyForm": {
+    "addTitle": "Add New Key",
+    "editTitle": "Edit Key",
+    "fields": {
+      "site": "Site",
+      "selectSite": "Select a site",
+      "description": "Description",
+      "keyCount": "Key Count",
+      "setCount": "Set Count",
+      "notes": "Notes"
+    },
+    "buttons": {
+      "save": "Save",
+      "saving": "Saving...",
+      "cancel": "Cancel"
+    }
+  },
+  "issueKeyForm": {
+    "title": "Issue Key",
+    "fields": {
+      "site": "Site (enter code or part of the name)",
+      "issuedTo": "Issued To",
+      "issuedAt": "Issue Date and Time"
+    },
+    "noAvailableKeys": "No available keys for issuance. All keys are already issued or no keys have been added yet.",
+    "buttons": {
+      "issue": "Issue Key",
+      "processing": "Processing...",
+      "cancel": "Cancel"
+    }
+  },
+  "returnKeyForm": {
+    "title": "Return Key",
+    "fields": {
+      "site": "Site",
+      "returnedAt": "Return Date and Time",
+      "notes": "Notes"
+    },
+    "noIssuedKeys": "No issued keys to return.",
+    "buttons": {
+      "return": "Return Key",
+      "processing": "Processing...",
+      "cancel": "Cancel"
+    }
+  },
+  "language": {
+    "select": "Language",
+    "en": "English",
+    "ua": "Ukrainian"
+  },
+  "common": {
+    "view": "View",
+    "processing": "Processing..."
+  }
+}
