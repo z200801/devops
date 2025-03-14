@@ -9,8 +9,8 @@ services:
       - no-new-privileges:true
     read_only: true
     tmpfs:
-      - /tmp:noexec
-      - /run:noexec
+      - /tmp:noexec,nosuid,nodev
+      - /run:noexec,nosuid,nodev
       - /run/postgresql:noexec
     expose: ["5432"]
     environment:
@@ -49,8 +49,8 @@ services:
       - no-new-privileges:true
     read_only: true
     tmpfs:
-      - /tmp:noexec
-      - /run:noexec
+      - /tmp:noexec,nosuid,nodev
+      - /run:noexec,nosuid,nodev
     expose: ['8000']
     # volumes: [./backend:/app]
     depends_on:
@@ -91,8 +91,8 @@ services:
       - no-new-privileges:true
     read_only: true
     tmpfs:
-      - /tmp:noexec
-      - /run:noexec
+      - /tmp:noexec,nosuid,nodev
+      - /run:noexec,nosuid,nodev
       - /var/cache/nginx:noexec
     ports: [127.0.0.1:18180:80]
     environment:

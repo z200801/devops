@@ -16,11 +16,8 @@ Used
 ## Start project
 
 ```sh
-#!/bin/bash
-
-_pr_name="key_tr_prod"
-for i in build create; do docker compose -p "${_pr_name}" ${i}; done
-docker compose -p "${_pr_name}" up -d
+make tag VERSION=0.0.1
+make deploy VERSION=0.0.1 PROJECT_NAME=key_tr_dev1
 ```
 
 In browser open: `http://localhost:18180`
