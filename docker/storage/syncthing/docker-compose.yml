@@ -1,0 +1,55 @@
+services:
+  syncthing:
+    image: syncthing/syncthing:latest
+    container_name: syncthing-replica
+    hostname: "${SYNCTHING_HOSTNAME:-node0}"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - STNODEFAULTFOLDER=1
+      - STGUIADDRESS=0.0.0.0:8384
+      - STNORELAYS=1
+      - STNOGLOBALANN=1
+      - STNOUPGRADE=1
+      - STNOLANANN=1
+    volumes:
+      - ${HOME}/projects/replica_data/cluster/data:/var/syncthing
+    ports:
+      - "8384:8384"       # Web UI
+      - "22000:22000"     # TCP file transfers
+      - "22000:22000/udp" # QUIC file transfers
+      - "21027:21027/udp" # Receive local discovery broadcasts
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    networks:
+      - syncthing
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 96M 
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8384/rest/system/ping", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+networks:
+  syncthing:
+    driver: bridge
