@@ -1,0 +1,4 @@
+.dockerignore
+Makefile
+branch.info
+version.info

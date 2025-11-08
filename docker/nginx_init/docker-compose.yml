@@ -1,0 +1,38 @@
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE, CHOWN, SETGID, SETUID]
+    security_opt: [no-new-privileges:true]
+    # read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev
+      - /run:noexec,nosuid,nodev
+      - /var/cache/nginx/:rw,noexec,nosuid,nodev,mode=1777
+      - /var/run:noexec,nodev,size=10M,mode=1777
+      # - /usr/share/nginx/html:rw,noexec,nosuid,nodev,size=5M
+    networks: ["nginx"]
+    ports:
+      - "8080:80"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 8M
+        reservations:
+          cpus: '0.1'
+          memory: 6M
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail localhost:80 || exit 1"]
+      start_period: 10s
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+networks:
+  nginx:
+    driver: bridge
+      
