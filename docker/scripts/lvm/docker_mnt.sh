@@ -62,20 +62,20 @@ lvm_mount()
         echo "Chek link to LVM"
         lnk1=$(ls -ld ${dest_mnt_dir}|cut -d ' ' -f1|cut -b1)
         if [ "${lnk1}" = "d" ]; then
-	    echo "Making link to dir"
+	    echo "Making link to dir [${mnt_dir}]->[${dest_mnt_dir}]"
     	    mv "${dest_mnt_dir}" "${dest_mnt_dir}.old"
-	    ln -s "${lvm_dir}" "${dest_mnt_dir}"
+	    ln -s ${mnt_dir} ${dest_mnt_dir}
         else
 	    echo "link present. lnk1=[${lnk1}]"
         fi
     fi
+    echo "Docker: starting"
     _service_enable docker
 }
 
 # LVM umount 
 lvm_umount()
 {
-    
     _service_disable docker 2>/dev/null
     _service_disable docker.socket
     if [ -d "${dest_mnt_dir}.old" ]; then 
