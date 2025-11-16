@@ -1,0 +1,20 @@
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:2.0.2
+    volumes:
+      - data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:13001:3001"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+volumes:
+  data:
+
