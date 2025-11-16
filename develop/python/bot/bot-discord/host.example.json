@@ -1,0 +1,30 @@
+{
+  "check_interval": 5,
+  "hosts": {
+    "server1": {
+      "name": "Main Server",
+      "host": "192.168.1.6",
+      "user": "user",
+      "ssh_key_base64": "YOUR_BASE64_KEY_HERE",
+      "monitor": true,
+      "thresholds": {
+        "ram": 85,
+        "disk": 90,
+        "cpu": 75
+      }
+    },
+    "server2": {
+      "name": "Backup Server",
+      "host": "192.168.1.7",
+      "user": "admin",
+      "ssh_key_base64": "YOUR_BASE64_KEY_HERE",
+      "monitor": false,
+      "thresholds": {
+        "ram": 75,
+        "disk": 60,
+        "cpu": 55
+      }
+    }
+  },
+  "default": "server1"
+}
