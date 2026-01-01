@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  registry:
+    image: registry:2
+    ports:
+      - "5000:5000"
+    environment:
+      # Registry storage configuration
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /var/lib/registry
+      
+      # Enable deletion of images
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+      
+      # HTTP configuration
+      REGISTRY_HTTP_ADDR: 0.0.0.0:5000
+      REGISTRY_HTTP_SECRET: changeme-generate-random-secret
+      
+      # Health check configuration
+      REGISTRY_HEALTH_STORAGEDRIVER_ENABLED: "true"
+      REGISTRY_HEALTH_STORAGEDRIVER_INTERVAL: 10s
+      REGISTRY_HEALTH_STORAGEDRIVER_THRESHOLD: 3
+    volumes:
+      - registry-data:/var/lib/registry
+    deploy:
+      # Run only on manager nodes
+      placement:
+        constraints:
+          - node.role == manager
+      
+      # Resource limits
+      resources:
+        limits:
+          cpus: '1.0'           # Maximum 1 CPU core
+          memory: 512M          # Maximum 512MB RAM
+        reservations:
+          cpus: '0.25'          # Reserve 0.25 CPU core
+          memory: 128M          # Reserve 128MB RAM
+      
+      # Restart policy
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      
+      # Update configuration
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        monitor: 30s
+      
+      # Rollback configuration
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+      
+      # Labels for service discovery
+      labels:
+        - "service.name=registry"
+        - "service.type=infrastructure"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/v2/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  registry-data:
+    driver: local
+
+networks:
+  default:
+    driver: overlay
+    attachable: true
