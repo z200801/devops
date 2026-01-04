@@ -29,22 +29,22 @@ help: ## Show this help message
 
 .PHONY: build
 build: ## Build Docker image
-	docker build -t $(IMAGE_NAME):$(TAG) .
+	@docker build -t $(IMAGE_NAME):$(TAG) .
 
 .PHONY: verify-templates
 verify-templates: ## Verify templates are installed
 	@echo "Checking installed templates..."
-	docker run --rm $(IMAGE_NAME):$(TAG) -tl | head -20
+	@docker run --rm $(IMAGE_NAME):$(TAG) -tl | head -20
 
 
 .PHONY: run
 run: ## Run container with help
-	docker run --rm $(IMAGE_NAME):$(TAG)
+	@docker run --rm $(IMAGE_NAME):$(TAG)
 
 
 .PHONY: scan
 scan: ## Scan single target (use TARGET_URL=https://...)
-	docker run --rm \
+	@docker run --rm \
 		-v $(PWD)/$(RESULTS_DIR):/output \
 		$(IMAGE_NAME):$(TAG) \
 		-u $(TARGET_URL) \
@@ -58,7 +58,7 @@ scan-list: ## Scan from targets file (use TARGET_FILE=targets.txt)
 		echo "Error: $(TARGET_FILE) not found!"; \
 		exit 1; \
 	fi
-	docker run --rm \
+	@docker run --rm \
 		-v $(PWD)/$(TARGET_FILE):/targets.txt \
 		-v $(PWD)/$(RESULTS_DIR):/output \
 		$(IMAGE_NAME):$(TAG) \
@@ -68,7 +68,7 @@ scan-list: ## Scan from targets file (use TARGET_FILE=targets.txt)
 
 .PHONY: scan-cve
 scan-cve: ## Scan CVEs only
-	docker run --rm \
+	@docker run --rm \
 		-v $(PWD)/$(RESULTS_DIR):/output \
 		$(IMAGE_NAME):$(TAG) \
 		-u $(TARGET_URL) \
@@ -77,7 +77,7 @@ scan-cve: ## Scan CVEs only
 
 .PHONY: scan-severity
 scan-severity: ## Scan with severity filter (use SEVERITY=critical,high)
-	docker run --rm \
+	@docker run --rm \
 		-v $(PWD)/$(RESULTS_DIR):/output \
 		$(IMAGE_NAME):$(TAG) \
 		-u $(TARGET_URL) \
@@ -87,7 +87,7 @@ scan-severity: ## Scan with severity filter (use SEVERITY=critical,high)
 
 .PHONY: scan-exposures
 scan-exposures: ## Scan exposures
-	docker run --rm \
+	@docker run --rm \
 		-v $(PWD)/$(RESULTS_DIR):/output \
 		$(IMAGE_NAME):$(TAG) \
 		-u $(TARGET_URL) \
@@ -97,7 +97,7 @@ scan-exposures: ## Scan exposures
 
 .PHONY: scan-misconfig
 scan-misconfig: ## Scan misconfigurations
-	docker run --rm \
+	@docker run --rm \
 		-v $(PWD)/$(RESULTS_DIR):/output \
 		$(IMAGE_NAME):$(TAG) \
 		-u $(TARGET_URL) \
@@ -107,15 +107,15 @@ scan-misconfig: ## Scan misconfigurations
 
 .PHONY: update-templates
 update-templates: ## Update templates in running container
-	docker run --rm $(IMAGE_NAME):$(TAG) -update-templates
+	@docker run --rm $(IMAGE_NAME):$(TAG) -update-templates
 
 .PHONY: clean
 clean: ## Clean results and Docker image
-	rm -rf $(RESULTS_DIR)
-	docker rmi $(IMAGE_NAME):$(TAG) 2>/dev/null || true
+	@rm -rf $(RESULTS_DIR)
+	@docker rmi $(IMAGE_NAME):$(TAG) 2>/dev/null || true
 
 .PHONY: clean-results
 clean-results: ## Clean only results
-	rm -rf $(RESULTS_DIR)/*
+	@rm -rf $(RESULTS_DIR)/*
 
 
