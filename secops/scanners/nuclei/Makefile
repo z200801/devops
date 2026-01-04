@@ -38,7 +38,7 @@ verify-templates: ## Verify templates are installed
 
 
 .PHONY: run
-run: build ## Run container with help
+run: ## Run container with help
 	docker run --rm $(IMAGE_NAME):$(TAG)
 
 
