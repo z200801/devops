@@ -65,7 +65,7 @@ The tool provides detailed metrics including generation time, FPS, throughput, a
 
 ### 1. Download Models
 
-\`\`\`bash
+```bash
 # Navigate to ComfyUI checkpoints directory
 cd /path/to/ComfyUI/models/checkpoints
 
@@ -77,11 +77,11 @@ wget https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt/resolv
 
 # Verify downloads
 ls -lh *.safetensors
-\`\`\`
+```
 
 ### 2. Download Benchmark Script
 
-\`\`\`bash
+```bash
 # Navigate to your working directory
 cd /path/to/your/workspace
 
@@ -91,45 +91,45 @@ wget https://raw.githubusercontent.com/your-repo/text2video_benchmark.py
 
 # Make executable (Linux/Mac)
 chmod +x text2video_benchmark.py
-\`\`\`
+```
 
 ### 3. Verify ComfyUI is Running
 
-\`\`\`bash
+```bash
 # Check if ComfyUI is accessible
 curl http://localhost:8188/system_stats
 
 # Expected response: JSON with system info
-\`\`\`
+```
 
 If ComfyUI is not running:
 
-\`\`\`bash
+```bash
 cd /path/to/ComfyUI
 python main.py --listen 0.0.0.0 --port 8188
-\`\`\`
+```
 
 ## 📖 Usage
 
 ### Basic Syntax
 
-\`\`\`bash
+```bash
 python text2video_benchmark.py SERVER:PORT [OPTIONS]
-\`\`\`
+```
 
 ### Show Help
 
-\`\`\`bash
+```bash
 # Display full help and examples
 python text2video_benchmark.py
 
 # Or explicitly
 python text2video_benchmark.py --help
-\`\`\`
+```
 
 ### Quick Start
 
-\`\`\`bash
+```bash
 # Basic benchmark with default settings
 python text2video_benchmark.py localhost:8188
 
@@ -138,7 +138,7 @@ python text2video_benchmark.py localhost:8188 --iterations 10
 
 # Quick test (fewer frames/steps)
 python text2video_benchmark.py localhost:8188 --frames 14 --steps 15 --iterations 3
-\`\`\`
+```
 
 ## ⚙️ Parameters
 
@@ -146,7 +146,7 @@ python text2video_benchmark.py localhost:8188 --frames 14 --steps 15 --iteration
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
-| \`SERVER:PORT\` | ComfyUI server address | \`localhost:8188\` or \`127.0.0.1:8188\` |
+| `SERVER:PORT` | ComfyUI server address | `localhost:8188` or `127.0.0.1:8188` |
 
 ### Optional
 
