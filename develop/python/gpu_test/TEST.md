@@ -22,3 +22,17 @@ python comfyui-svd_xt-benchmark.py 127.0.0.1:8188 \
   --iterations 10 \
   --output full_benchmark.json
 ```
+
+```sh
+python comfyui-svd_xt-benchmark.py 127.0.0.1:8188 \
+  --image-checkpoint sd_xl_base_1.0.safetensors \
+  --video-checkpoint svd_xt.safetensors \
+  --frames 25 \
+  --width 512 \
+  --height 512 \
+  --steps 20 \
+  --fps 8 \
+  --motion-bucket-id 127 \
+  --iterations 10 \
+  --output full_benchmark-512x512.json
+```
