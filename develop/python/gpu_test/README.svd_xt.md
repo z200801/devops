@@ -584,9 +584,9 @@ nvidia-smi dmon -s pucvmet
 │  │ → CLIPTextEncode (positive/negative)           │     │
 │  │ → EmptyLatentImage (1024x576)                  │     │
 │  │ → KSampler (20 steps, DPM++ 2M Karras)         │     │
-│  │ → VAEDecode                                     │     │
+│  │ → VAEDecode                                    │     │
 │  └────────────────────────────────────────────────┘     │
-│  Output: Single 1024x576 image (~1.5-2s on H100)       │
+│  Output: Single 1024x576 image (~1.5-2s on H100)        │
 └────────────────────┬────────────────────────────────────┘
                      │
                      v
@@ -597,16 +597,16 @@ nvidia-smi dmon -s pucvmet
 │  │ → SVD_img2vid_Conditioning                     │     │
 │  │   - video_frames: 25                           │     │
 │  │   - motion_bucket_id: 127                      │     │
-│  │   - fps: 8                                      │     │
+│  │   - fps: 8                                     │     │
 │  │ → KSampler (20 steps, Euler Karras)            │     │
-│  │ → VAEDecode                                     │     │
+│  │ → VAEDecode                                    │     │
 │  └────────────────────────────────────────────────┘     │
-│  Output: 25 frames (576x1024 each) (~13-18s on H100)   │
+│  Output: 25 frames (576x1024 each) (~13-18s on H100)    │
 └────────────────────┬────────────────────────────────────┘
                      │
                      v
 ┌─────────────────────────────────────────────────────────┐
-│  Output: Complete Video (25 frames @ 8fps = 3.125s)    │
+│  Output: Complete Video (25 frames @ 8fps = 3.125s)     │
 │  Total generation time: ~15-20s on H100                 │
 └─────────────────────────────────────────────────────────┘
 ```
