@@ -56,8 +56,8 @@ The tool provides detailed metrics including generation time, FPS, throughput, a
 
 ### Models
 
-- **SDXL Base 1.0** (\`sd_xl_base_1.0.safetensors\`) - ~6.9 GB
-- **SVD-XT** (\`svd_xt.safetensors\`) - ~9.5 GB
+- **SDXL Base 1.0** (`sd_xl_base_1.0.safetensors`) - ~6.9 GB
+- **SVD-XT** (`svd_xt.safetensors`) - ~9.5 GB
 
 **Total storage required**: ~16.4 GB for models
 
@@ -154,119 +154,119 @@ python text2video_benchmark.py localhost:8188 --frames 14 --steps 15 --iteration
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| \`--image-checkpoint\` | \`sd_xl_base_1.0.safetensors\` | SDXL model for image generation |
-| \`--video-checkpoint\` | \`svd_xt.safetensors\` | SVD-XT model for video generation |
+| `--image-checkpoint` | `sd_xl_base_1.0.safetensors` | SDXL model for image generation |
+| `--video-checkpoint` | `svd_xt.safetensors` | SVD-XT model for video generation |
 
 #### Video Settings
 
 | Parameter | Default | Range | Description |
 |-----------|---------|-------|-------------|
-| \`--frames\` | \`25\` | 14-25 | Number of video frames (SVD-XT supports 14 or 25) |
-| \`--width\` | \`1024\` | 512-1536 | Video width in pixels |
-| \`--height\` | \`576\` | 288-864 | Video height in pixels |
-| \`--steps\` | \`20\` | 10-50 | Denoising steps (higher = better quality, slower) |
-| \`--fps\` | \`8\` | 6-12 | Frames per second for playback |
-| \`--motion-bucket-id\` | \`127\` | 0-255 | Motion intensity |
+| `--frames` | `25` | 14-25 | Number of video frames (SVD-XT supports 14 or 25) |
+| `--width` | `1024` | 512-1536 | Video width in pixels |
+| `--height` | `576` | 288-864 | Video height in pixels |
+| `--steps` | `20` | 10-50 | Denoising steps (higher = better quality, slower) |
+| `--fps` | `8` | 6-12 | Frames per second for playback |
+| `--motion-bucket-id` | `127` | 0-255 | Motion intensity |
 
 **Motion Bucket ID Guide:**
-- \`0-50\`: Minimal motion (almost static)
-- \`50-100\`: Low motion (subtle movements)
-- \`100-150\`: Medium motion (normal, **default: 127**)
-- \`150-200\`: High motion (active movements)
-- \`200-255\`: Very high motion (may be unstable)
+- `0-50`: Minimal motion (almost static)
+- `50-100`: Low motion (subtle movements)
+- `100-150`: Medium motion (normal, **default: 127**)
+- `150-200`: High motion (active movements)
+- `200-255`: Very high motion (may be unstable)
 
 #### Benchmark Settings
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| \`--iterations\` | \`5\` | Number of test runs |
-| \`--output\` | \`text2video_benchmark.json\` | Output filename |
+| `--iterations` | `5` | Number of test runs |
+| `--output` | `text2video_benchmark.json` | Output filename |
 
 #### Utility
 
 | Parameter | Description |
 |-----------|-------------|
-| \`--list\` | List available checkpoints and exit |
+| `--list` | List available checkpoints and exit |
 
 ## 💡 Examples
 
 ### 1. Standard Benchmark
 
-\`\`\`bash
+```bash
 python text2video_benchmark.py localhost:8188
-\`\`\`
+```
 
 **Configuration:**
 - 5 iterations
 - 25 frames per video
 - 1024x576 resolution
 - 20 denoising steps
-- Results saved to \`text2video_benchmark.json\`
+- Results saved to `text2video_benchmark.json`
 
 ### 2. Production Benchmark (H100/High-end GPU)
 
-\`\`\`bash
+```bash
 python text2video_benchmark.py 127.0.0.1:8188 \\
   --iterations 10 \\
   --output h100_production_benchmark.json
-\`\`\`
+```
 
 **Use case:** Comprehensive benchmark for production deployment decisions
 
 ### 3. Quick Test (Fast iteration)
 
-\`\`\`bash
+```bash
 python text2video_benchmark.py localhost:8188 \\
   --frames 14 \\
   --steps 15 \\
   --iterations 3 \\
   --output quick_test.json
-\`\`\`
+```
 
 **Use case:** Fast sanity check, initial testing
 
 ### 4. High Quality (More steps, higher motion)
 
-\`\`\`bash
+```bash
 python text2video_benchmark.py localhost:8188 \\
   --steps 30 \\
   --motion-bucket-id 150 \\
   --iterations 5 \\
   --output high_quality_test.json
-\`\`\`
+```
 
 **Use case:** Maximum quality benchmark
 
 ### 5. Lower Resolution (Faster, less VRAM)
 
-\`\`\`bash
+```bash
 python text2video_benchmark.py localhost:8188 \\
   --width 768 \\
   --height 432 \\
   --frames 14 \\
   --output low_res_test.json
-\`\`\`
+```
 
 **Use case:** Testing on GPUs with limited VRAM (16-20GB)
 
 ### 6. Remote Server
 
-\`\`\`bash
+```bash
 python text2video_benchmark.py 192.168.1.100:8188 \\
   --iterations 10 \\
   --output remote_server_benchmark.json
-\`\`\`
+```
 
 **Use case:** Benchmarking remote ComfyUI instance
 
 ### 7. List Available Models
 
-\`\`\`bash
+```bash
 python text2video_benchmark.py localhost:8188 --list
-\`\`\`
+```
 
 **Output:**
-\`\`\`
+```
 Connecting to http://localhost:8188...
 
 Available checkpoints:
@@ -274,13 +274,13 @@ Available checkpoints:
   - svd_xt.safetensors
   - sd_v1-5-pruned-emaonly.safetensors
   - dreamshaperXL.safetensors
-\`\`\`
+```
 
 ## 📊 Output Format
 
 ### Console Output Example
 
-\`\`\`
+```
 ======================================================================
 TEXT-TO-VIDEO BENCHMARK
 ======================================================================
@@ -326,11 +326,11 @@ Videos per minute: 3.25
 ======================================================================
 
 Results saved to: text2video_benchmark.json
-\`\`\`
+```
 
 ### JSON Output Format
 
-\`\`\`json
+```json
 {
   "image_checkpoint": "sd_xl_base_1.0.safetensors",
   "video_checkpoint": "svd_xt.safetensors",
@@ -349,20 +349,20 @@ Results saved to: text2video_benchmark.json
   "time_per_frame": 0.738,
   "all_times": [18.23, 17.89, 18.67, 19.12, 18.34]
 }
-\`\`\`
+```
 
 ### Metrics Explanation
 
 | Metric | Description | Unit |
 |--------|-------------|------|
-| \`avg_time\` | Average generation time per video | seconds |
-| \`min_time\` | Fastest generation time | seconds |
-| \`max_time\` | Slowest generation time | seconds |
-| \`std_deviation\` | Consistency measure (lower = more consistent) | seconds |
-| \`avg_fps_generation\` | Processing speed during generation | frames/sec |
-| \`videos_per_minute\` | Throughput | videos/min |
-| \`time_per_frame\` | Average time to process one frame | seconds/frame |
-| \`all_times\` | Individual iteration times | array of seconds |
+| `avg_time` | Average generation time per video | seconds |
+| `min_time` | Fastest generation time | seconds |
+| `max_time` | Slowest generation time | seconds |
+| `std_deviation` | Consistency measure (lower = more consistent) | seconds |
+| `avg_fps_generation` | Processing speed during generation | frames/sec |
+| `videos_per_minute` | Throughput | videos/min |
+| `time_per_frame` | Average time to process one frame | seconds/frame |
+| `all_times` | Individual iteration times | array of seconds |
 
 ## 📈 Performance Expectations
 
@@ -401,7 +401,7 @@ Results saved to: text2video_benchmark.json
 
 **Solutions:**
 
-\`\`\`bash
+```bash
 # 1. Check if ComfyUI is running
 curl http://localhost:8188/system_stats
 
@@ -417,7 +417,7 @@ python main.py --listen 0.0.0.0 --port 8188
 
 # 5. Check firewall settings
 sudo ufw allow 8188
-\`\`\`
+```
 
 ### Issue: "SVD_img2vid_Conditioning not found"
 
@@ -425,7 +425,7 @@ sudo ufw allow 8188
 
 **Solutions:**
 
-\`\`\`bash
+```bash
 # 1. Update ComfyUI to latest version
 cd /path/to/ComfyUI
 git pull
@@ -438,7 +438,7 @@ cd custom_nodes
 git clone https://github.com/ltdrdata/ComfyUI-Manager
 cd ..
 python main.py
-\`\`\`
+```
 
 ### Issue: "Out of memory" / CUDA OOM
 
@@ -447,36 +447,36 @@ python main.py
 **Solutions:**
 
 1. **Reduce frames:**
-   \`\`\`bash
+   ```bash
    python text2video_benchmark.py localhost:8188 --frames 14
-   \`\`\`
+   ```
 
 2. **Lower resolution:**
-   \`\`\`bash
+   ```bash
    python text2video_benchmark.py localhost:8188 --width 768 --height 432
-   \`\`\`
+   ```
 
 3. **Reduce steps:**
-   \`\`\`bash
+   ```bash
    python text2video_benchmark.py localhost:8188 --steps 15
-   \`\`\`
+   ```
 
 4. **Combination (most effective):**
-   \`\`\`bash
+   ```bash
    python text2video_benchmark.py localhost:8188 \\
      --frames 14 \\
      --width 768 \\
      --height 432 \\
      --steps 15
-   \`\`\`
+   ```
 
 5. **Clear GPU memory:**
-   \`\`\`bash
+   ```bash
    # Restart ComfyUI
    # Or use nvidia-smi to kill processes
    nvidia-smi
    kill -9 <PID>
-   \`\`\`
+   ```
 
 ### Issue: "Checkpoint not found"
 
@@ -484,7 +484,7 @@ python main.py
 
 **Solutions:**
 
-\`\`\`bash
+```bash
 # 1. List available checkpoints
 python text2video_benchmark.py localhost:8188 --list
 
@@ -501,7 +501,7 @@ wget https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt/resolv
 ls -lh *.safetensors
 
 # 4. Restart ComfyUI
-\`\`\`
+```
 
 ### Issue: "Workflow timeout"
 
@@ -509,10 +509,10 @@ ls -lh *.safetensors
 
 **Current workaround:** Edit script and increase timeout value:
 
-\`\`\`python
+```python
 # In text2video_benchmark.py, line ~95
 result = self.wait_for_completion(prompt_id, timeout=1200)  # Increase to 1200s
-\`\`\`
+```
 
 **Note:** This usually indicates a problem with GPU performance or configuration.
 
@@ -522,7 +522,7 @@ result = self.wait_for_completion(prompt_id, timeout=1200)  # Increase to 1200s
 
 **Diagnostic steps:**
 
-\`\`\`bash
+```bash
 # 1. Test ComfyUI directly
 curl http://localhost:8188/system_stats
 
@@ -541,7 +541,7 @@ nvidia-smi
 
 # 5. Check VRAM usage during run
 watch -n 1 nvidia-smi
-\`\`\`
+```
 
 ### Issue: "High variance / inconsistent results"
 
@@ -552,7 +552,7 @@ watch -n 1 nvidia-smi
 
 **Solutions:**
 
-\`\`\`bash
+```bash
 # 1. Check GPU temperature
 nvidia-smi
 
@@ -565,13 +565,13 @@ nvidia-smi dmon -s pucvmet
 # 4. Run benchmark when system is idle
 
 # 5. Increase cooling / check thermal paste
-\`\`\`
+```
 
 ## 🔬 Technical Details
 
 ### Pipeline Architecture
 
-\`\`\`
+```
 ┌─────────────────────────────────────────────────────────┐
 │                    Text Prompt                          │
 └────────────────────┬────────────────────────────────────┘
@@ -609,7 +609,7 @@ nvidia-smi dmon -s pucvmet
 │  Output: Complete Video (25 frames @ 8fps = 3.125s)    │
 │  Total generation time: ~15-20s on H100                 │
 └─────────────────────────────────────────────────────────┘
-\`\`\`
+```
 
 ### Model Specifications
 
@@ -636,13 +636,13 @@ nvidia-smi dmon -s pucvmet
 
 | Node | Purpose | Key Parameters |
 |------|---------|----------------|
-| \`CheckpointLoaderSimple\` | Load SDXL model | \`ckpt_name\` |
-| \`CLIPTextEncode\` | Convert text to embeddings | \`text\`, \`clip\` |
-| \`EmptyLatentImage\` | Create latent space | \`width\`, \`height\`, \`batch_size\` |
-| \`KSampler\` | Denoise latent | \`steps\`, \`cfg\`, \`sampler_name\`, \`scheduler\` |
-| \`VAEDecode\` | Latent to image | \`samples\`, \`vae\` |
-| \`ImageOnlyCheckpointLoader\` | Load SVD model | \`ckpt_name\` |
-| \`SVD_img2vid_Conditioning\` | Prepare for video | \`video_frames\`, \`motion_bucket_id\`, \`fps\` |
+| `CheckpointLoaderSimple` | Load SDXL model | `ckpt_name` |
+| `CLIPTextEncode` | Convert text to embeddings | `text`, `clip` |
+| `EmptyLatentImage` | Create latent space | `width`, `height`, `batch_size` |
+| `KSampler` | Denoise latent | `steps`, `cfg`, `sampler_name`, `scheduler` |
+| `VAEDecode` | Latent to image | `samples`, `vae` |
+| `ImageOnlyCheckpointLoader` | Load SVD model | `ckpt_name` |
+| `SVD_img2vid_Conditioning` | Prepare for video | `video_frames`, `motion_bucket_id`, `fps` |
 
 ### Performance Factors
 
@@ -683,24 +683,24 @@ nvidia-smi dmon -s pucvmet
 ### Configuration Recommendations
 
 **Maximum Quality:**
-\`\`\`bash
+```bash
 --frames 25 --steps 30 --motion-bucket-id 150
-\`\`\`
+```
 
 **Balanced (Recommended):**
-\`\`\`bash
+```bash
 --frames 25 --steps 20 --motion-bucket-id 127
-\`\`\`
+```
 
 **Maximum Speed:**
-\`\`\`bash
+```bash
 --frames 14 --steps 15 --motion-bucket-id 100
-\`\`\`
+```
 
 **Low VRAM (16-20GB):**
-\`\`\`bash
+```bash
 --frames 14 --width 768 --height 432 --steps 15
-\`\`\`
+```
 
 ## 📄 License
 
