@@ -14,8 +14,8 @@ STACK_NAME        ?= $(SERVICE)
 # Paths
 PROJECTS_DIR      ?= $(HOME)/projects/itv
 DEPLOY_DIR         = $(PROJECTS_DIR)/$(SERVICE)/dswarm/$(ENV)/deploy
-COMPOSE_FILE      := $(DEPLOY_DIR)/docker-compose.yml
-COMPOSE_FILES      = $(SERVICES:%=docker-compose.yml)
+COMPOSE_FILE      := $(DEPLOY_DIR)/docker-compose.$(SERVICE).yml
+COMPOSE_FILES      = $(SERVICES:%=docker-compose.%.yml)
 ALL_SERVICES       = $(foreach f,$(COMPOSE_FILES),-c $(f))
 
 # Git configuration
@@ -37,6 +37,7 @@ REGISTRY_API       = $(REGISTRY_URL)/v2
 MANIFEST_V2        = application/vnd.docker.distribution.manifest.v2+json
 MANIFEST_LIST      = application/vnd.docker.distribution.manifest.list.v2+json
 MANIFEST_OCI       = application/vnd.oci.image.manifest.v1+json
+MANIFEST_OCI_INDEX = application/vnd.oci.image.index.v1+json
 
 # ==============================================================================
 # Helper Functions
@@ -171,9 +172,15 @@ registry-list-all: ## List all images with tags and short digests
 		echo ""; \
 		echo "Repository: $$repo"; \
 		curl -s $(REGISTRY_API)/$$repo/tags/list | jq -r '.tags[]' | while read tag; do \
-			DIGEST=$$(curl -s -I -H "Accept: $(MANIFEST_V2)" \
-				$(REGISTRY_API)/$$repo/manifests/$$tag 2>/dev/null | \
-				grep -i "Docker-Content-Digest:" | awk '{print $$2}' | tr -d '\r\n' | cut -d: -f2 | cut -c1-12); \
+			DIGEST=""; \
+			for ACCEPT in "$(MANIFEST_V2)" "$(MANIFEST_LIST)" "$(MANIFEST_OCI)" "$(MANIFEST_OCI_INDEX)"; do \
+				DIGEST=$$(curl -s -I -H "Accept: $$ACCEPT" \
+					$(REGISTRY_API)/$$repo/manifests/$$tag 2>/dev/null | \
+					grep -i "Docker-Content-Digest:" | awk '{print $$2}' | tr -d '\r\n' | cut -d: -f2 | cut -c1-12); \
+				if [ -n "$$DIGEST" ]; then \
+					break; \
+				fi; \
+			done; \
 			if [ -n "$$DIGEST" ]; then \
 				printf "  %-20s %s\n" "$$tag" "$$DIGEST"; \
 			else \
@@ -191,9 +198,15 @@ endif
 	@printf "  %-20s %s\n" "TAG" "SHORT-ID"
 	@printf "  %-20s %s\n" "---" "--------"
 	@curl -s $(REGISTRY_API)/$(IMAGE)/tags/list | jq -r '.tags[]' | while read tag; do \
-		DIGEST=$$(curl -s -I -H "Accept: $(MANIFEST_V2)" \
-			$(REGISTRY_API)/$(IMAGE)/manifests/$$tag 2>/dev/null | \
-			grep -i "Docker-Content-Digest:" | awk '{print $$2}' | tr -d '\r\n' | cut -d: -f2 | cut -c1-12); \
+		DIGEST=""; \
+		for ACCEPT in "$(MANIFEST_V2)" "$(MANIFEST_LIST)" "$(MANIFEST_OCI)" "$(MANIFEST_OCI_INDEX)"; do \
+			DIGEST=$$(curl -s -I -H "Accept: $$ACCEPT" \
+				$(REGISTRY_API)/$(IMAGE)/manifests/$$tag 2>/dev/null | \
+				grep -i "Docker-Content-Digest:" | awk '{print $$2}' | tr -d '\r\n' | cut -d: -f2 | cut -c1-12); \
+			if [ -n "$$DIGEST" ]; then \
+				break; \
+			fi; \
+		done; \
 		if [ -n "$$DIGEST" ]; then \
 			printf "  %-20s %s\n" "$$tag" "$$DIGEST"; \
 		else \
@@ -257,9 +270,15 @@ ifndef TAG
 	$(error TAG is not set. Example: make registry-remove-tag IMAGE=myapp TAG=v1.0)
 endif
 	@echo "Removing $(IMAGE):$(TAG)..."
-	@DIGEST=$$(curl -s -I -H "Accept: $(MANIFEST_V2)" \
-		$(REGISTRY_API)/$(IMAGE)/manifests/$(TAG) | \
-		grep -i Docker-Content-Digest | awk '{print $$2}' | tr -d '\r'); \
+	@DIGEST=""; \
+	for ACCEPT in "$(MANIFEST_V2)" "$(MANIFEST_LIST)" "$(MANIFEST_OCI)" "$(MANIFEST_OCI_INDEX)"; do \
+		DIGEST=$$(curl -s -I -H "Accept: $$ACCEPT" \
+			$(REGISTRY_API)/$(IMAGE)/manifests/$(TAG) | \
+			grep -i Docker-Content-Digest | awk '{print $$2}' | tr -d '\r'); \
+		if [ -n "$$DIGEST" ]; then \
+			break; \
+		fi; \
+	done; \
 	if [ -z "$$DIGEST" ]; then \
 		echo "✗ Could not get digest - tag may be orphaned"; \
 		echo "  Use: make registry-cleanup-orphaned IMAGE=$(IMAGE)"; \
@@ -293,9 +312,15 @@ endif
 	echo ""; \
 	echo "$$TAGS_TO_DELETE" | while read tag; do \
 		echo "Removing: $$tag"; \
-		DIGEST=$$(curl -s -I -H "Accept: $(MANIFEST_V2)" \
-			$(REGISTRY_API)/$(IMAGE)/manifests/$$tag | \
-			grep -i Docker-Content-Digest | awk '{print $$2}' | tr -d '\r'); \
+		DIGEST=""; \
+		for ACCEPT in "$(MANIFEST_V2)" "$(MANIFEST_LIST)" "$(MANIFEST_OCI)" "$(MANIFEST_OCI_INDEX)"; do \
+			DIGEST=$$(curl -s -I -H "Accept: $$ACCEPT" \
+				$(REGISTRY_API)/$(IMAGE)/manifests/$$tag | \
+				grep -i Docker-Content-Digest | awk '{print $$2}' | tr -d '\r'); \
+			if [ -n "$$DIGEST" ]; then \
+				break; \
+			fi; \
+		done; \
 		if [ -n "$$DIGEST" ]; then \
 			curl -s -o /dev/null -X DELETE $(REGISTRY_API)/$(IMAGE)/manifests/$$DIGEST; \
 		fi; \
@@ -325,7 +350,7 @@ endif
 	for tag in $$TAGS; do \
 		echo "Processing: $$tag"; \
 		DIGEST=""; \
-		for ACCEPT in "$(MANIFEST_V2)" "$(MANIFEST_LIST)" "$(MANIFEST_OCI)"; do \
+		for ACCEPT in "$(MANIFEST_V2)" "$(MANIFEST_LIST)" "$(MANIFEST_OCI)" "$(MANIFEST_OCI_INDEX)"; do \
 			DIGEST=$$(curl -s -I -H "Accept: $$ACCEPT" \
 				$(REGISTRY_API)/$(IMAGE)/manifests/$$tag 2>/dev/null | \
 				grep -i "Docker-Content-Digest:" | awk '{print $$2}' | tr -d '\r\n'); \
