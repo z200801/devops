@@ -1,11 +1,14 @@
 ```sh
+_gpu_card=$(nvidia-smi -L|grep -Po "\S+ \S+: \S+ \K.*(?=\()"|sed 's/ /_/g')
+d1=$(date +%Y%m%d-%H%M)
+
 python comfyui-benchmark.py \
   --checkpoint "sd_xl_base_1.0.safetensors" \
   --steps 20 \
   --resolution 1024 \
   --iterations 10 \
   --server http://localhost:8188 \
-  --output h100_sdxl_base.json
+  --output ${_gpu_card}_sdxl_base-${d1}.json
 ```
 
 ## SVD XT
