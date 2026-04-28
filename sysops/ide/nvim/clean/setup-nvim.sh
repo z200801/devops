@@ -1,4 +1,3 @@
-cat > setup-nvim.sh << 'SCRIPT'
 #!/usr/bin/env bash
 set -e
 
@@ -82,7 +81,6 @@ map("n", "<leader>lr", "<cmd>lua vim.lsp.buf.rename()<cr>", { desc = "Rename" })
 map("n", "<leader>ld", "<cmd>lua vim.diagnostic.open_float()<cr>", { desc = "Diagnostics" })
 
 -- буфери
-map("n", "<leader>bd", "<cmd>bdelete<cr>", { desc = "Delete buffer" })
 map("n", "<Tab>", "<cmd>bnext<cr>")
 map("n", "<S-Tab>", "<cmd>bprev<cr>")
 
@@ -115,6 +113,16 @@ map("n", "<leader>fM", "<cmd>Telescope man_pages<cr>", { desc = "Man pages" })
 map("n", "<leader>fe", "<cmd>Telescope env<cr>", { desc = "Environment variables" })
 map("n", "<leader>fh", "<cmd>Telescope help_tags<cr>", { desc = "Help tags" })
 map("n", "<leader>md", "<cmd>RenderMarkdown toggle<cr>", { desc = "Toggle markdown render" })
+
+-- AI
+map("n", "<leader>ca", "<cmd>CodeiumToggle<cr>", { desc = "Toggle Codeium" })
+
+-- теми
+map("n", "<leader>t1", "<cmd>colorscheme catppuccin-mocha<cr>", { desc = "Theme dark" })
+map("n", "<leader>t2", "<cmd>colorscheme catppuccin-macchiato<cr>", { desc = "Theme macchiato" })
+map("n", "<leader>t3", "<cmd>colorscheme catppuccin-frappe<cr>", { desc = "Theme frappe" })
+map("n", "<leader>t4", "<cmd>colorscheme catppuccin-latte<cr>", { desc = "Theme light" })
+map("n", "<leader>t5", "<cmd>colorscheme zellner<cr>", { desc = "Theme most light" })
 
 EOF
 
@@ -196,8 +204,8 @@ return {
         settings = {
           yaml = {
             schemas = {
-              ["https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json"] = "docker-compose*.yaml","docker-compose*.yml",
-              ["https://raw.githubusercontent.com/docker/compose/master/schema/compose-spec.json"] = "stack*.yaml","stack*.yml",
+              ["https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json"] = { "docker-compose*.yaml", "docker-compose*.yml" },
+              ["https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json"] = { "stack*.yaml", "stack*.yml" },
             },
           },
         },
@@ -478,11 +486,26 @@ cat > "$NVIM_CONFIG/cheatsheet.md" << 'EOF'
 
 ## File Manager
 
+### Oil
 | Key | Action |
 |-----|--------|
 | `Space+e` | Oil (file manager) |
 | `F7` | Toggle Aerial |
 | `F8` | Toggle Tagbar |
+
+
+### Neotree
+| Key | Action |
+|-----|--------|
+| `Space+E` | NeoTree (file manager) |
+| `Enter` | Open file |
+| `Tab` | Goto next opened file |
+| `Shift+Tab` | Goto previous opened file |
+| `Shift-s` | Open file on split vertical window |
+| `Shift-S` | Open file on split horizontal window |
+| `<leader>-fb` | Show opend files |
+| `<leader>-bd` | Close opend file |
+
 
 ## Git
 
@@ -539,6 +562,16 @@ cat > "$NVIM_CONFIG/cheatsheet.md" << 'EOF'
 | `Space+fh` | Help tags |
 | `Space+md` | Toggle markdown render |
 | `Space+?` | This cheatsheet |
+
+## Ai
+
+| Key | Action |
+|-----|--------|
+| `Space+ca` | Toggle Codeium |
+| `Ctrl-l` | Approve |
+| `Alt-]` | Next suggestion |
+| `Alt-[` | Previous suggestion |
+
 EOF
 
 
@@ -562,10 +595,8 @@ return {
 }
 EOF
 
-cat >> setup-nvim.sh << 'APPEND'
-
-# plugins/neotree.lua
-cat > "$NVIM_CONFIG/lua/plugins/neotree.lua" << 'EOF'
+# plugins/ne
+cat > "$NVIMeotree.lua" << 'EOF'
 return {
   {
     "nvim-neo-tree/neo-tree.nvim",
@@ -582,6 +613,11 @@ return {
       window = {
         position = "left",
         width = 35,
+        mappings = {
+          ["<cr>"] = "open",
+          ["s"] = "open_vsplit",
+          ["S"] = "open_split",
+        },
       },
       filesystem = {
         filtered_items = {
@@ -597,10 +633,36 @@ return {
   },
 }
 EOF
-APPEND
+
+cat > ~/.config/nvim/lua/plugins/codeium.lua << 'EOF'
+return {
+  {
+    "Exafunction/codeium.vim",
+    dependencies = {
+      "nvim-lua/plenary.nvim",
+      "hrsh7th/nvim-cmp",
+    },
+    enabled = true,
+    event = "BufEnter",
+    config = function()
+      vim.cmd [[CodeiumDisable]]
+      vim.keymap.set("i", "<C-l>", function() return vim.fn["codeium#Accept"]() end, { expr = true, silent = true })
+      vim.keymap.set("i", "<M-]>", function() return vim.fn["codeium#CycleCompletions"](1) end, { expr = true, silent = true })
+      vim.keymap.set("i", "<M-[>", function() return vim.fn["codeium#CycleCompletions"](-1) end, { expr = true, silent = true })
+    end,
+  },
+}
+EOF
+
+cat > ~/.config/nvim/lua/plugins/bufdelete.lua << 'EOF'
+return {
+  {
+    "famiu/bufdelete.nvim",
+    keys = {
+      { "<leader>bd", "<cmd>Bdelete<cr>", desc = "Delete buffer" },
+    },
+  },
+}
+EOF
 
 echo "Done. Run: nvim"
-SCRIPT
-
-chmod +x setup-nvim.sh
-

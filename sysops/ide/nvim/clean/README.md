@@ -135,7 +135,7 @@ make restore
 | `Space+fT` | Git stash |
 | `Space+fp` | Projects |
 
-### System (Telescope)
+### System
 
 | Key | Action |
 |-----|--------|
@@ -143,7 +143,16 @@ make restore
 | `Space+fe` | Environment variables |
 | `Space+fh` | Help tags |
 | `Space+md` | Toggle markdown render |
+| `Space+ca` | Toggle Codeium |
 | `Space+?` | Cheatsheet |
+
+### Codeium (insert mode)
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+l` | Accept suggestion |
+| `Alt+]` | Next suggestion |
+| `Alt+[` | Previous suggestion |
 
 ---
 
@@ -172,6 +181,7 @@ make restore
 | `which-key.nvim` | Keybinding hints |
 | `indent-blankline` | Indent guides |
 | `render-markdown.nvim` | Markdown rendering |
+| `codeium.vim` | AI code completion |
 
 ## LSP Servers
 

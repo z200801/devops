@@ -58,3 +58,11 @@ remove-backup: ## Remove specific backup (usage: make remove-backup DATE=2026042
 		echo "Removed backup $(BACKUP)"; \
 	fi
 
+.PHONY: update
+update: ## Check dependencies and sync nvim config
+	bash requirements.sh
+	bash check-config.sh
+	nvim --headless "+Lazy! sync" +qa
+	nvim --headless "+MasonUpdate" +qa
+
+

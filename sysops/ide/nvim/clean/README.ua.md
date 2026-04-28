@@ -135,7 +135,7 @@ make restore
 | `Space+fT` | Git stash |
 | `Space+fp` | Projects |
 
-### System (Telescope)
+### System
 
 | Клавіша | Дія |
 |---------|-----|
@@ -143,7 +143,16 @@ make restore
 | `Space+fe` | Environment variables |
 | `Space+fh` | Help tags |
 | `Space+md` | Toggle markdown render |
+| `Space+ca` | Toggle Codeium |
 | `Space+?` | Cheatsheet |
+
+### Codeium (режим вводу)
+
+| Клавіша | Дія |
+|---------|-----|
+| `Ctrl+l` | Прийняти підказку |
+| `Alt+]` | Наступна підказка |
+| `Alt+[` | Попередня підказка |
 
 ---
 
@@ -172,6 +181,7 @@ make restore
 | `which-key.nvim` | Підказки клавіш |
 | `indent-blankline` | Відступи |
 | `render-markdown.nvim` | Рендеринг markdown |
+| `codeium.vim` | AI автодоповнення |
 
 ## LSP Сервери
 
