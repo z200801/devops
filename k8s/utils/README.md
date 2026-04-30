@@ -1,23 +1,25 @@
 # k8s-get-config
 
-A Bash utility for managing Kubernetes user access via ServiceAccounts and RBAC, with kubeconfig generation. Tested on Kubernetes 1.34+.
+A Bash utility for managing Kubernetes user access via ServiceAccounts and RBAC, with kubeconfig generation. Supports cluster-scoped and namespace-scoped roles, custom ClusterRoles, and token rotation. Tested on Kubernetes 1.34+.
 
 ## Features
 
-- Create users with `admin` (cluster-admin) or `readonly` (view + nodes-viewer) roles.
-- Issue short-lived tokens via `kubectl create token` with configurable TTL.
-- Issue long-lived tokens via manually-managed Secrets with the `kubernetes.io/service-account.name` annotation.
-- Generate ready-to-use kubeconfig files (`<user>-kubeconfig`) in the current directory.
-- List existing users with TTL and expiry info, in a human table or JSON.
-- Backward compatibility: detects users in `kube-system` (legacy installations) for `--list` and `--delete`.
-- Uses a dedicated namespace for users (default: `kube-users`, autocreated).
+- Cluster-scoped roles: `admin` (cluster-admin) and `readonly` (view + nodes-viewer).
+- Namespace-scoped roles: `editor` (edit) and `view`.
+- Custom ClusterRoles via `--cluster-role` (cluster-wide or namespace-scoped).
+- Token rotation via `--update --ttl`.
+- Adding namespace access to existing users via `--update --role ... --namespace ...`.
+- Partial revocation: `--delete --user X --namespace Y` removes only namespace access.
+- Listing with TTL/expiry and scope information, in human table or JSON.
+- Backward compatibility: detects users in `kube-system` (legacy installations).
+- Centralized SA storage in dedicated namespace (default: `kube-users`, autocreated).
 
 ## Requirements
 
-- `kubectl` configured against the target cluster with admin permissions (must be able to create ServiceAccounts, ClusterRoleBindings, Secrets, and Namespaces).
+- `kubectl` configured against the target cluster with admin permissions (must be able to create ServiceAccounts, ClusterRoleBindings, RoleBindings, Secrets, Namespaces).
 - `jq`
 - `base64` (GNU coreutils)
-- A Kubernetes cluster, version 1.24+ recommended; tested on 1.34+.
+- Kubernetes cluster, recommended 1.24+; tested on 1.34+.
 
 ## Installation
 
@@ -26,38 +28,48 @@ chmod +x k8s-get-config.sh
 ./k8s-get-config.sh --help
 ```
 
-## Usage
+## Commands
 
 ```
-Usage: ./k8s-get-config.sh [OPTIONS]
-
-Options:
-  --create   --user <name> --role <admin|readonly> [--ttl <duration>]
-  --delete   --user <name>
-  --mkconfig --user <name> [--ttl <duration>]
-  --list [--json]
+--create   --user <name> [role-spec] [--ttl <duration>]
+--update   --user <name> [role-spec] [--ttl <duration>]
+--delete   --user <name> [--namespace <ns>]
+--mkconfig --user <name>
+--rotate   (--user <name> | --all) [--ttl <duration>] [--yes]
+--list     [--json]
 ```
 
-### Roles
+### Role specifications
 
-| Role       | Bindings                                        |
-| ---------- | ----------------------------------------------- |
-| `admin`    | `cluster-admin` ClusterRole                     |
-| `readonly` | `view` ClusterRole + custom `nodes-viewer` (get/list/watch on `nodes`) |
+**Cluster-scope** (no `--namespace`):
 
-The custom `nodes-viewer` ClusterRole is created automatically on the first `readonly` user creation.
+| Flag                       | Effect                                             |
+| -------------------------- | -------------------------------------------------- |
+| `--role admin`             | ClusterRoleBinding to `cluster-admin`              |
+| `--role readonly`          | ClusterRoleBindings to `view` + `nodes-viewer`     |
+| `--cluster-role <name>`    | ClusterRoleBinding to existing custom ClusterRole  |
+
+**Namespace-scope** (requires `--namespace <ns>`):
+
+| Flag                                       | Effect                                        |
+| ------------------------------------------ | --------------------------------------------- |
+| `--role editor --namespace NS`             | RoleBinding to `edit` ClusterRole, in NS      |
+| `--role view --namespace NS`               | RoleBinding to `view` ClusterRole, in NS      |
+| `--cluster-role <name> --namespace NS`     | RoleBinding to custom ClusterRole, in NS      |
+
+`--role` and `--cluster-role` are mutually exclusive. `--cluster-role` requires the named ClusterRole to already exist (verified before binding).
+
+The `nodes-viewer` ClusterRole is custom and created automatically on the first `readonly` user.
 
 ### TTL
 
-The `--ttl` flag controls token lifetime:
-
 | `--ttl` value         | Behavior                                                     |
 | --------------------- | ------------------------------------------------------------ |
-| not provided          | Long-lived token (manual Secret)                             |
-| `0`                   | Long-lived token (manual Secret)                             |
+| not provided          | Long-lived token (manual Secret with `kubernetes.io/service-account-token`) |
+| `0`                   | Long-lived token                                             |
 | Go duration (`24h`, `30m`, `2h30m`, `7d`, `3600s`) | Short-lived token via `kubectl create token --duration` |
 
-**Important**: short-lived TTLs are bounded by the API server's `--service-account-max-token-expiration` flag (default ~24h on most clusters). If the API server truncates a requested TTL, the script prints a warning showing the actual expiry.
+Short-lived TTLs are bounded by the API server's `--service-account-max-token-expiration` flag (default ~24h on most clusters). If the API server truncates a requested TTL, the script prints a warning showing the actual expiry.
 
 To raise the limit, set on the kube-apiserver:
 
@@ -65,146 +77,233 @@ To raise the limit, set on the kube-apiserver:
 --service-account-max-token-expiration=720h
 ```
 
-Long-lived tokens via manual Secret have no expiry. They are technically supported in Kubernetes 1.34 but considered legacy by the official documentation. They are appropriate for trusted long-running CI/CD pipelines or admin tooling, but **should be rotated manually** as a hygiene practice.
+### `--create`
 
-### Examples
+Creates a new user. Fails if the user already exists in `kube-users` or `kube-system`.
 
 ```bash
-# Long-lived admin token (default behavior)
+# Cluster admin, long-lived token
 ./k8s-get-config.sh --create --user alice --role admin
 
-# Long-lived readonly token (explicit)
-./k8s-get-config.sh --create --user observer --role readonly --ttl 0
+# Cluster readonly, 24h short-lived
+./k8s-get-config.sh --create --user audit --role readonly --ttl 24h
 
-# Short-lived (24h) admin token for CI
-./k8s-get-config.sh --create --user ci-deploy --role admin --ttl 24h
+# Namespace editor, long-lived token
+./k8s-get-config.sh --create --user dev1 --role editor --namespace myapp
 
-# Short-lived (30 days) readonly token
-./k8s-get-config.sh --create --user audit --role readonly --ttl 720h
+# Namespace view, 8h short-lived
+./k8s-get-config.sh --create --user observer --role view --namespace staging --ttl 8h
 
-# Regenerate kubeconfig using the existing long-lived secret
-./k8s-get-config.sh --mkconfig --user alice
+# Custom ClusterRole, cluster-wide
+./k8s-get-config.sh --create --user audit --cluster-role my-auditor
 
-# Issue a fresh 8h short-lived token, overwrite kubeconfig
-./k8s-get-config.sh --mkconfig --user observer --ttl 8h
+# Custom ClusterRole, scoped to one namespace
+./k8s-get-config.sh --create --user prodaudit --cluster-role prod-auditor --namespace prod
+```
 
-# Replace existing token with a new long-lived one
-./k8s-get-config.sh --mkconfig --user alice --ttl 0
+### `--update`
 
-# List all users, table format
-./k8s-get-config.sh --list
+Modifies an existing user. At least one of `--ttl`, `--role`/`--cluster-role` (with `--namespace`) must be specified.
 
-# List as JSON for further processing
-./k8s-get-config.sh --list --json | jq '.[] | select(.ttl == "short-lived")'
+```bash
+# Rotate token to 8h short-lived
+./k8s-get-config.sh --update --user alice --ttl 8h
 
-# Delete user (SA, bindings, secret, local kubeconfig)
+# Switch to long-lived (creates Secret if needed)
+./k8s-get-config.sh --update --user alice --ttl 0
+
+# Add namespace access (no token rotation)
+./k8s-get-config.sh --update --user dev1 --role view --namespace staging
+
+# Add namespace access AND rotate token
+./k8s-get-config.sh --update --user dev1 --role editor --namespace anotherapp --ttl 24h
+
+# Add custom ClusterRole binding in a namespace
+./k8s-get-config.sh --update --user audit --cluster-role auditor --namespace finance
+```
+
+**Behavior rules:**
+
+- **TTL switch closes security gaps**: if a user has a long-lived Secret and `--update --ttl <dur>` requests a short-lived token, the old Secret is **deleted** before the new short-lived token is issued. Otherwise the old credential remains valid in parallel — a security gap.
+- **Role replacement in same namespace** (rule b): if a user already has `view` in `myapp` and you run `--update --role editor --namespace myapp`, the existing RoleBinding is replaced with the new one. Single RoleBinding per (user, namespace) is enforced.
+- **Duplicate add** (rule c): if the exact same RoleBinding already exists, the script prints a warning and makes no changes. Idempotent.
+- **Cluster-scope role changes are not allowed via `--update`**. To change a cluster-scope role, use `--delete` + `--create`. This avoids ambiguity (admin↔readonly is a fundamentally different setup).
+
+### `--delete`
+
+```bash
+# Full delete: SA, all bindings (cluster + ns), Secret, kubeconfig
 ./k8s-get-config.sh --delete --user alice
+
+# Partial: revoke only RoleBindings in a specific namespace
+# SA, other ns access, cluster bindings, and kubeconfig are preserved
+./k8s-get-config.sh --delete --user dev1 --namespace myapp
 ```
 
-### `--list` output
+### `--mkconfig`
 
-Default (table):
+Regenerates the kubeconfig file from an existing long-lived Secret. Does **not** issue new tokens. To rotate the token, use `--update --ttl <dur>`.
 
-```
-USER                  ROLE        NS            TTL           EXPIRES                  REMAINING     NOTE
-----------------------------------------------------------------------------------------------------------------
-alice                 admin       kube-users    short-lived   2026-04-30 20:30:58 UTC  in 1d0h       from kubeconfig
-bob                   readonly    kube-users    never         -                        -             from kubeconfig
-carol                 admin       kube-system   never         -                        -             long-lived secret [legacy]
-ghost                 admin       kube-users    short-lived   unknown                  unknown       kubeconfig not found
+```bash
+./k8s-get-config.sh --mkconfig --user alice
 ```
 
-JSON (`--list --json`):
+If the user has no long-lived Secret (was created with a short-lived TTL), `--mkconfig` fails with a hint to use `--update`.
+
+### `--rotate`
+
+Rotates tokens. Useful for periodic credential refresh, especially for long-lived Secrets that should be cycled as a hygiene practice.
+
+```bash
+# Rotate one user; auto-detect TTL from local kubeconfig (or default 24h if missing)
+./k8s-get-config.sh --rotate --user alice
+
+# Rotate one user with explicit new TTL (also closes long->short security gap)
+./k8s-get-config.sh --rotate --user alice --ttl 1h
+
+# Rotate all users in kube-users (with confirmation prompt)
+./k8s-get-config.sh --rotate --all
+
+# Rotate all without prompt (CI/automation)
+./k8s-get-config.sh --rotate --all --yes
+
+# Rotate all and force a specific TTL on everyone
+./k8s-get-config.sh --rotate --all --ttl 24h --yes
+```
+
+**Behavior:**
+
+- **Long-lived users**: the existing Secret is **deleted and recreated**. The old token is invalidated immediately. Any existing kubeconfig copies become unusable until a new one is distributed.
+- **Short-lived users**: a new short-lived token is issued. The previously issued token (if still valid) **remains valid until its original expiry** — short-lived tokens cannot be revoked from the cluster side without recreating the SA. Acceptable because TTLs are short by design.
+- **TTL auto-detection** (without explicit `--ttl`): the script reads the local `./<user>-kubeconfig`, decodes the JWT, and computes original TTL as `exp - iat`. If the kubeconfig is missing and no long-lived Secret exists, falls back to default `24h` with a warning.
+- **`--all` skips legacy users** in `kube-system`. Rotate them individually with `--rotate --user <name>` if needed.
+- **Failures in `--all`** do not stop the run. At the end the script reports a list of users that failed and exits with code 1.
+- **Progress output** is shown as `[N/total] rotating <user>...` for `--all`.
+
+**Confirmation:** `--rotate --all` prompts before proceeding. Use `--yes` (or `-y`) to skip the prompt for non-interactive use.
+
+### `--list`
+
+Default output:
+
+```
+USER                  ROLE                SCOPE                    TTL           EXPIRES                  REMAINING     NOTE
+------------------------------------------------------------------------------------------------------------------------------------
+alice                 admin               cluster                  short-lived   2026-04-30 21:00:09 UTC  in 1d0h       from kubeconfig
+audit                 custom:my-auditor   cluster                  never         -                        -             long-lived secret
+bob                   readonly            cluster                  never         -                        -             from kubeconfig
+carol                 admin               cluster                  never         -                        -             long-lived secret [legacy]
+dev1                  editor              ns:myapp                 short-lived   2026-04-30 04:00:09 UTC  in 7h59m      from kubeconfig
+dev1                  view                ns:staging               short-lived   2026-04-30 04:00:09 UTC  in 7h59m      from kubeconfig
+dev2                  view                ns:myapp,staging         never         -                        -             long-lived secret
+prodaudit             custom:prod-auditor ns:prod                  never         -                        -             long-lived secret
+```
+
+JSON output (`--json`):
 
 ```json
 [
   {
     "user": "alice",
     "role": "admin",
-    "namespace": "kube-users",
+    "sa_namespace": "kube-users",
+    "scope": "cluster",
+    "namespaces": [],
     "ttl": "short-lived",
-    "expires": "2026-04-30 20:30:58 UTC",
-    "expires_unix": 1777581058,
+    "expires": "2026-04-30 21:00:09 UTC",
+    "expires_unix": 1777582809,
     "remaining": "in 1d0h",
     "note": "from kubeconfig",
     "legacy": false
+  },
+  {
+    "user": "dev1",
+    "role": "editor",
+    "sa_namespace": "kube-users",
+    "scope": "namespace",
+    "namespaces": ["myapp"],
+    "ttl": "short-lived",
+    "expires": "...",
+    ...
   }
 ]
 ```
 
-#### How TTL/expiry is resolved
+#### How `--list` works
 
-The script cannot read short-lived tokens back from the cluster (they are not stored anywhere — `kubectl create token` returns the JWT once). To still show meaningful TTL info, `--list` uses this resolution order per user:
+A single user can have multiple bindings:
+- Cluster-scope (one row per user with cluster bindings).
+- Namespace-scope (one row per (user, role) tuple; same role across multiple namespaces is collapsed into a comma-separated list).
 
-1. Look for a local kubeconfig file `./<user>-kubeconfig` in the current directory. If found, parse the JWT, decode the `exp` claim, and report the actual expiry.
-2. If no local kubeconfig: check whether a long-lived Secret `<user>-token` exists in the user's namespace. If yes, report TTL as `never`.
-3. Otherwise: report TTL as `short-lived` and expiry as `unknown` (the token was issued but not stored locally and not via long-lived Secret).
+A user with both cluster and namespace bindings appears in multiple rows.
 
-**Implication**: run `--list` from the directory where kubeconfigs live to get accurate expiry data for short-lived tokens.
+#### TTL/expiry resolution
 
-The `[legacy]` tag indicates a user that still resides in `kube-system` from older installations. New users are always created in `kube-users`.
+Short-lived tokens (`kubectl create token`) are **not stored** anywhere on the cluster — they exist only in the kubeconfig given to the user. To still show meaningful expiry info, `--list` resolves per user:
+
+1. Read local kubeconfig `./<user>-kubeconfig` if present, decode JWT, extract `exp` claim.
+2. Otherwise, check for long-lived Secret `<user>-token` in user's namespace → report TTL as `never`.
+3. Otherwise, report `short-lived` with `unknown` expiry.
+
+Run `--list` from the directory holding the kubeconfigs for accurate short-lived expiry data.
 
 ## Configuration
 
 | Variable           | Default      | Purpose                                  |
 | ------------------ | ------------ | ---------------------------------------- |
-| `K8S_USERS_NS`     | `kube-users` | Namespace for new ServiceAccounts        |
+| `K8S_USERS_NS`     | `kube-users` | Namespace for user ServiceAccounts       |
 
-The legacy namespace `kube-system` is hardcoded for backward compatibility and not configurable.
+The legacy namespace `kube-system` is hardcoded for backward compatibility (read-only fallback for `--list` and `--delete`).
 
 ## Architecture notes
 
-### Why a dedicated namespace?
+### Resource layout
 
-Mixing user ServiceAccounts with control-plane components in `kube-system` is an anti-pattern:
+- **ServiceAccount** — always in `kube-users` (centralized).
+- **ClusterRoleBinding** — for cluster-scope access. Subject references the SA in `kube-users`.
+- **RoleBinding** — in the target namespace. Subject references the SA in `kube-users` (cross-namespace SA reference is supported by Kubernetes).
+- **Long-lived Secret** — in `kube-users` (paired with the SA).
 
-- **Security**: any controller with `get/list secrets -n kube-system` sees user tokens. Pod Security Standards in `kube-system` are typically permissive.
-- **Auditing**: user-driven actions are mixed with system actions in audit logs.
-- **Operations**: bulk operations during cluster upgrades may inadvertently touch user resources.
-- **RBAC delegation**: granting "user management" rights cleanly is impossible if it requires `kube-system` access (effectively cluster-root).
+### Naming convention
 
-The `kube-users` namespace isolates user accounts and is created on demand.
+| Resource                              | Pattern                                     |
+| ------------------------------------- | ------------------------------------------- |
+| ClusterRoleBinding `admin`            | `<user>-binding`                            |
+| ClusterRoleBinding `readonly` (view)  | `<user>-binding-view`                       |
+| ClusterRoleBinding `readonly` (nodes) | `<user>-binding-nodes`                      |
+| ClusterRoleBinding custom             | `<user>-binding-custom-<clusterrole>`       |
+| RoleBinding `editor`                  | `<user>-rb-edit` (in target ns)             |
+| RoleBinding `view`                    | `<user>-rb-view` (in target ns)             |
+| RoleBinding custom                    | `<user>-rb-custom-<clusterrole>`            |
+| Long-lived Secret                     | `<user>-token` (in `kube-users`)            |
+
+Names exceeding the DNS-1123 limit (63 chars) cause an explicit error rather than silent truncation.
 
 ### Token strategy
 
-- **Short-lived** (`--ttl <duration>`): uses `kubectl create token`. Bound to the SA, expires automatically. Recommended for CI/CD and time-bounded access.
-- **Long-lived** (`--ttl 0` or omitted): creates a `Secret` of type `kubernetes.io/service-account-token` with the `kubernetes.io/service-account.name` annotation. Kubernetes populates `.data.token` automatically. Token does not expire while the Secret exists.
+- **Short-lived** (`--ttl <duration>`): `kubectl create token`. Bound to the SA, expires automatically. Recommended for CI/CD and time-bounded access.
+- **Long-lived** (`--ttl 0` or omitted): `Secret` of type `kubernetes.io/service-account-token` with annotation `kubernetes.io/service-account.name`. Kubernetes populates `.data.token` automatically. Token does not expire while the Secret exists.
 
-The script detects when the API server truncates a requested TTL (via `--service-account-max-token-expiration`) by parsing the JWT `exp` claim and comparing against the requested duration.
+The script detects API-server-side TTL truncation (`--service-account-max-token-expiration`) by parsing the JWT `exp` claim and warning if the actual TTL is significantly shorter than requested.
 
-### Idempotency
+### Idempotency and safety
 
-- ClusterRoleBindings are created via `kubectl apply` — re-running `--mkconfig` or repeating `--create` (after `--delete`) does not error on existing bindings.
-- The `nodes-viewer` ClusterRole is created only if absent.
-- `--delete` uses `--ignore-not-found` for all resources.
-
-### What `--create` does
-
-1. Ensures namespace `kube-users` exists.
-2. Refuses if a SA with the same name exists in `kube-users` or `kube-system`.
-3. Creates `ServiceAccount/<user>` in `kube-users`.
-4. Creates ClusterRoleBindings:
-   - `admin` → `<user>-binding` → `cluster-admin`
-   - `readonly` → `<user>-binding-view` → `view`, `<user>-binding-nodes` → `nodes-viewer`
-5. Issues token (long-lived Secret or short-lived via `kubectl create token`).
-6. Writes `<user>-kubeconfig` (mode 600) in CWD.
-
-### What `--delete` does
-
-1. Locates the user in `kube-users` or `kube-system`.
-2. Deletes ClusterRoleBindings: `<user>-binding`, `<user>-binding-view`, `<user>-binding-nodes`.
-3. Deletes Secret `<user>-token` (if present).
-4. Deletes ServiceAccount.
-5. Removes local `<user>-kubeconfig`.
+- Bindings are created via `kubectl apply`; re-running the same command does not error.
+- Built-in `nodes-viewer` ClusterRole is created only if absent.
+- `--delete` uses `--ignore-not-found` everywhere.
+- `--update --ttl` switching from long-lived to short-lived **deletes the old Secret** to prevent parallel valid credentials.
+- Same-namespace role raise (e.g. `view` → `editor`) **replaces** the existing RoleBinding rather than adding a second one.
+- Same-namespace duplicate (`view` → `view`) is a no-op with warning.
 
 ## Limitations
 
-- Tokens issued via `kubectl create token` are **not** stored anywhere on the cluster. Once the kubeconfig is lost, the only recovery is to issue a new token via `--mkconfig --ttl <duration>`.
-- The script writes kubeconfigs to CWD. Run it from a directory where you intend to keep the files (or move them after creation).
-- Cluster CA is read from the **current kubectl context**. The generated kubeconfig will work only against the same cluster.
-- `--list` requires read access to `clusterrolebindings` and (for long-lived secret detection) `secrets` in `kube-users` and `kube-system`.
+- Short-lived tokens are not recoverable from the cluster. If a kubeconfig is lost, issue a new token via `--update --ttl <dur>`.
+- Kubeconfigs are written to CWD. Run the script from the directory you intend to keep them in.
+- CA is read from the current kubectl context; generated kubeconfigs work only against that cluster.
+- Multiple namespaces in a single command (e.g. `--namespace a,b,c`) are not supported. Run `--update` repeatedly, or use a custom ClusterRole that already covers the desired scope.
+- Cluster-scope role changes (admin ↔ readonly) require `--delete` + `--create`. `--update` only handles namespace-scope role additions and TTL changes.
 
 ## Author
 
 z200801@gmail.com — original concept and v1.0.
-v2.x: refactor with Claude (Anthropic).
+v2.x–3.x: refactor with Claude (Anthropic).

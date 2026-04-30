@@ -30,12 +30,18 @@ CMD_DELETE=false
 CMD_UPDATE=false
 CMD_MKCONFIG=false
 CMD_LIST=false
+CMD_ROTATE=false
 JSON_OUT=false
+ROTATE_ALL=false
+ASSUME_YES=false
 TARGET_USER=""
 ROLE=""
 CLUSTER_ROLE=""
 NAMESPACE=""
 TTL=""
+
+# Default TTL when rotation cannot determine original TTL from kubeconfig
+ROTATE_DEFAULT_TTL="24h"
 
 # ----- Helpers -----------------------------------------------------------------
 function _err()  { echo "ERROR: $*" >&2; }
@@ -135,6 +141,42 @@ function _jwt_exp() {
   local token=$1 payload
   payload=$(_jwt_decode_payload "${token}") || return 1
   printf '%s' "${payload}" | jq -r '.exp // empty'
+}
+
+function _jwt_iat() {
+  local token=$1 payload
+  payload=$(_jwt_decode_payload "${token}") || return 1
+  printf '%s' "${payload}" | jq -r '.iat // empty'
+}
+
+# Detect original TTL of an existing token by inspecting local kubeconfig.
+# Returns to stdout one of:
+#   - "long-lived" if JWT has no exp claim
+#   - Go duration like "24h0m0s" if exp - iat is meaningful
+#   - empty string + return 1 if unknown
+function _detect_original_ttl_from_kubeconfig() {
+  local user=$1
+  local config_file="./${user}-kubeconfig"
+  local token exp iat secs
+
+  token=$(_extract_token_from_kubeconfig "${config_file}" "${user}") || return 1
+  exp=$(_jwt_exp "${token}")
+  if [ -z "${exp}" ]; then
+    printf 'long-lived'
+    return 0
+  fi
+  iat=$(_jwt_iat "${token}")
+  if [ -n "${iat}" ]; then
+    secs=$(( exp - iat ))
+  else
+    # No iat -> approximate from now (degrades, but works for fresh tokens)
+    secs=$(( exp - $(date +%s) ))
+  fi
+  if [ "${secs}" -le 0 ]; then
+    return 1
+  fi
+  # Format as Go duration that kubectl create token accepts
+  printf '%ds' "${secs}"
 }
 
 function _fmt_ts() {
@@ -317,6 +359,20 @@ function delete_longlived_secret_if_exists() {
     _info "Deleting long-lived secret ${ns}/${sa}-token"
     kubectl delete secret "${sa}-token" -n "${ns}" --ignore-not-found >/dev/null
   fi
+}
+
+# Rotate a long-lived Secret: delete the existing one and create a fresh one.
+# This invalidates the old token. Returns new plaintext token to stdout.
+function rotate_longlived_secret() {
+  local sa=$1 ns=$2
+  delete_longlived_secret_if_exists "${sa}" "${ns}"
+  # Wait briefly for delete to propagate before recreate
+  local i
+  for i in 1 2 3 4 5; do
+    if ! _has_longlived_secret "${sa}" "${ns}"; then break; fi
+    sleep 1
+  done
+  create_longlived_secret "${sa}" "${ns}"
 }
 
 function get_short_token() {
@@ -731,6 +787,179 @@ function cmd_mkconfig() {
   generate_kubeconfig "${config}" "${user}" "${token}"
 }
 
+# ----- Rotation ----------------------------------------------------------------
+# Rotate a single user's token. Sets globals _ROT_RESULT ("ok"|"err") and _ROT_MSG.
+# explicit_ttl: if non-empty, force this TTL; if "0", force long-lived.
+function _rotate_one() {
+  local user=$1 explicit_ttl=$2
+  _ROT_RESULT="err"
+  _ROT_MSG=""
+
+  local sa_ns
+  if ! sa_ns=$(find_user_namespace "${user}"); then
+    _ROT_MSG="user not found"
+    return 1
+  fi
+
+  local effective_ttl=""
+  if [ -n "${explicit_ttl}" ]; then
+    # Caller forced a TTL (including "0" for long-lived)
+    effective_ttl="${explicit_ttl}"
+  else
+    # Detect from local kubeconfig
+    local detected
+    if detected=$(_detect_original_ttl_from_kubeconfig "${user}"); then
+      if [ "${detected}" = "long-lived" ]; then
+        effective_ttl="0"
+      else
+        effective_ttl="${detected}"
+      fi
+    else
+      # No kubeconfig — check if a long-lived Secret exists
+      if _has_longlived_secret "${user}" "${sa_ns}"; then
+        effective_ttl="0"
+      else
+        _warn "Cannot determine original TTL for ${user}; using default ${ROTATE_DEFAULT_TTL}"
+        effective_ttl="${ROTATE_DEFAULT_TTL}"
+      fi
+    fi
+  fi
+
+  local token config="${user}-kubeconfig"
+
+  if [ "${effective_ttl}" = "0" ]; then
+    # Long-lived rotation: delete old Secret, create new one (new token)
+    if ! token=$(rotate_longlived_secret "${user}" "${sa_ns}"); then
+      _ROT_MSG="failed to rotate long-lived secret"
+      return 1
+    fi
+  else
+    # Short-lived: if user currently has long-lived Secret, delete it (close gap)
+    if _has_longlived_secret "${user}" "${sa_ns}"; then
+      _warn "User ${user} had long-lived Secret; deleting it before issuing short-lived token"
+      delete_longlived_secret_if_exists "${user}" "${sa_ns}"
+    fi
+    if ! token=$(get_short_token "${user}" "${sa_ns}" "${effective_ttl}"); then
+      _ROT_MSG="failed to issue short-lived token (TTL=${effective_ttl})"
+      return 1
+    fi
+  fi
+
+  if ! generate_kubeconfig "${config}" "${user}" "${token}"; then
+    _ROT_MSG="failed to write kubeconfig"
+    return 1
+  fi
+
+  _ROT_RESULT="ok"
+  if [ "${effective_ttl}" = "0" ]; then
+    _ROT_MSG="long-lived"
+  else
+    _ROT_MSG="ttl=${effective_ttl}"
+  fi
+  return 0
+}
+
+# Build list of rotatable users (SA in USERS_NAMESPACE only — skip legacy).
+# Output: TSV "user\tns" lines.
+function _list_rotatable_users() {
+  kubectl get sa -n "${USERS_NAMESPACE}" -o json 2>/dev/null | jq -r --arg uns "${USERS_NAMESPACE}" '
+    .items[] | select(.metadata.name != "default")
+    | "\(.metadata.name)\t\($uns)"
+  '
+}
+
+function _confirm_rotate_all() {
+  local users_count=$1
+  if [ "${ASSUME_YES}" = "true" ]; then
+    return 0
+  fi
+  echo "" >&2
+  echo "About to rotate tokens for ${users_count} user(s) in ${USERS_NAMESPACE}." >&2
+  echo "This will invalidate existing kubeconfigs that use long-lived secrets." >&2
+  echo "Short-lived tokens already issued will remain valid until their expiry." >&2
+  echo "" >&2
+  printf 'Continue? [y/N]: ' >&2
+  local ans
+  read -r ans
+  case "${ans}" in
+    y|Y|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+function cmd_rotate() {
+  if [ "${ROTATE_ALL}" = "true" ] && [ -n "${TARGET_USER}" ]; then
+    _err "--user and --all are mutually exclusive"
+    return 1
+  fi
+  if [ "${ROTATE_ALL}" != "true" ] && [ -z "${TARGET_USER}" ]; then
+    _err "--rotate requires either --user <name> or --all"
+    return 1
+  fi
+
+  # Single user
+  if [ -n "${TARGET_USER}" ]; then
+    _rotate_one "${TARGET_USER}" "${TTL}"
+    if [ "${_ROT_RESULT}" = "ok" ]; then
+      _info "Rotated ${TARGET_USER} (${_ROT_MSG})"
+      return 0
+    else
+      _err "Rotation failed for ${TARGET_USER}: ${_ROT_MSG}"
+      return 1
+    fi
+  fi
+
+  # --all
+  local users_tsv
+  users_tsv=$(_list_rotatable_users)
+  if [ -z "${users_tsv}" ]; then
+    _info "No users found in ${USERS_NAMESPACE}"
+    return 0
+  fi
+
+  # Filter out users that have no bindings at all (orphan SAs from failed creates)
+  local user_list=()
+  local u ns
+  while IFS=$'\t' read -r u ns; do
+    [ -z "${u}" ] && continue
+    user_list+=("${u}")
+  done <<< "${users_tsv}"
+
+  local total=${#user_list[@]}
+
+  if ! _confirm_rotate_all "${total}"; then
+    _info "Rotation cancelled"
+    return 0
+  fi
+
+  local idx=0 ok_count=0 err_count=0
+  local -a failures=()
+  for u in "${user_list[@]}"; do
+    idx=$((idx + 1))
+    _info "[${idx}/${total}] rotating ${u}..."
+    if _rotate_one "${u}" "${TTL}"; then
+      ok_count=$((ok_count + 1))
+      _info "[${idx}/${total}] ${u} -> ${_ROT_MSG}"
+    else
+      err_count=$((err_count + 1))
+      failures+=("${u}: ${_ROT_MSG}")
+      _warn "[${idx}/${total}] ${u} FAILED: ${_ROT_MSG}"
+    fi
+  done
+
+  echo "" >&2
+  _info "Rotation complete: ${ok_count} ok, ${err_count} failed (total ${total})"
+  if [ ${err_count} -gt 0 ]; then
+    echo "" >&2
+    echo "Failed users:" >&2
+    for f in "${failures[@]}"; do
+      echo "  - ${f}" >&2
+    done
+    return 1
+  fi
+  return 0
+}
+
 # ----- Listing -----------------------------------------------------------------
 function _resolve_token_info() {
   local user=$1 ns=$2
@@ -1016,6 +1245,14 @@ Commands:
   --list [--json]
                 List all custom users with TTL/expiry and scope.
 
+  --rotate   (--user <name> | --all) [--ttl <duration>] [--yes]
+                Rotate token(s). For long-lived: deletes old Secret and creates
+                new one (invalidates old token). For short-lived: issues new
+                token (old continues until its expiry).
+                Without --ttl: detect from local kubeconfig; fall back to ${ROTATE_DEFAULT_TTL}.
+                --all: rotate all users in ${USERS_NAMESPACE} (legacy users skipped).
+                --yes / -y: skip confirmation prompt for --all.
+
 Role specifications:
   Cluster-scope:
     --role admin                    cluster-admin
@@ -1040,6 +1277,9 @@ Examples:
   $0 --create --user audit --cluster-role my-auditor --namespace prod
   $0 --update --user dev1  --role view --namespace staging
   $0 --update --user alice --ttl 8h
+  $0 --rotate --user alice
+  $0 --rotate --user alice --ttl 48h
+  $0 --rotate --all --yes
   $0 --delete --user dev1  --namespace myapp
   $0 --delete --user alice
   $0 --list --json
@@ -1064,6 +1304,9 @@ function main() {
       --delete)       CMD_DELETE=true;   shift ;;
       --mkconfig)     CMD_MKCONFIG=true; shift ;;
       --list)         CMD_LIST=true;     shift ;;
+      --rotate)       CMD_ROTATE=true;   shift ;;
+      --all)          ROTATE_ALL=true;   shift ;;
+      --yes|-y)       ASSUME_YES=true;   shift ;;
       --json)         JSON_OUT=true;     shift ;;
       --user)         TARGET_USER="$2";  shift 2 ;;
       --role)         ROLE="$2";         shift 2 ;;
@@ -1077,14 +1320,14 @@ function main() {
 
   # Exactly one command must be selected
   local cmd_count=0
-  for v in "${CMD_CREATE}" "${CMD_UPDATE}" "${CMD_DELETE}" "${CMD_MKCONFIG}" "${CMD_LIST}"; do
+  for v in "${CMD_CREATE}" "${CMD_UPDATE}" "${CMD_DELETE}" "${CMD_MKCONFIG}" "${CMD_LIST}" "${CMD_ROTATE}"; do
     [ "${v}" = "true" ] && cmd_count=$((cmd_count + 1))
   done
   if [ ${cmd_count} -eq 0 ]; then
     usage; exit 1
   fi
   if [ ${cmd_count} -gt 1 ]; then
-    _err "Only one command (--create, --update, --delete, --mkconfig, --list) allowed at a time"
+    _err "Only one command (--create, --update, --delete, --mkconfig, --list, --rotate) allowed at a time"
     exit 1
   fi
 
@@ -1102,6 +1345,8 @@ function main() {
     cmd_mkconfig "${TARGET_USER}"
   elif [[ ${CMD_LIST} == true ]]; then
     cmd_list
+  elif [[ ${CMD_ROTATE} == true ]]; then
+    cmd_rotate
   fi
 }
 
