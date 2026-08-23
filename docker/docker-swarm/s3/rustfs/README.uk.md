@@ -30,7 +30,7 @@ Overlay-мережа: `rustfs-edge` (ім'я зафіксовано, attachable)
 
 - Docker Engine з ініціалізованим Swarm (`docker swarm init` на вузлі)
 - `make`, `bash`
-- `mcli` (MinIO client, встановлений як `mcli` — **не** `mc`) для smoke-тестів
+- `rcli` (RustFS CLI, встановлений як `rcli`) для smoke-тестів та адмін-операцій
 - Доступ у зовнішню мережу з вузла Swarm при першому деплої (Traefik завантажує
   плагін `tomMoulard/fail2ban` з каталогу плагінів)
 
@@ -72,7 +72,7 @@ make secret-create ACCESS_KEY=<your-access-key> SECRET_KEY=<your-secret-key>
 > make secret-rotate ACCESS_KEY=<новий-ключ> SECRET_KEY=<новий-секрет>
 > ```
 >
-> Після ротації переналаштуйте mcli (`make alias-set`) і оновіть всі S3-клієнти
+> Після ротації переналаштуйте rcli (`make alias-set`) і оновіть всі S3-клієнти
 > новими кредами. Для ротації без простою використовуйте сервісні акаунти
 > (див. [§Сервісні акаунти](#сервісні-акаунти-ротація-кредів)).
 
@@ -125,9 +125,9 @@ docker service inspect rustfs_rustfs --format '{{json .Endpoint.Ports}}'
 # Expected: null
 ```
 
-### 5. Smoke-тест (mcli)
+### 5. Smoke-тест (rcli)
 
-Потребує, щоб `S3_HOST` резолвився на вузол, `mcli` у `PATH`, і запущений
+Потребує, щоб `S3_HOST` резолвився на вузол, `rcli` у `PATH`, і запущений
 стек (креди читаються з Docker secrets контейнера):
 
 ```bash
@@ -135,7 +135,7 @@ make test
 ```
 
 Скрипт виконує:
-1. Налаштовує псевдонім mcli, що вказує на `https://${S3_HOST}:${WEBSECURE_PORT}`
+1. Налаштовує псевдонім rcli, що вказує на `https://${S3_HOST}:${WEBSECURE_PORT}`
    (path-style, self-signed TLS, підпис S3v4).
 2. Створює бакет `smoke-test`.
 3. Завантажує `smoke.txt`, скачує його і перевіряє через `diff`.
@@ -163,11 +163,11 @@ PASS: object survived redeploy
 | Account | `RUSTFS_ACCESS_KEY` |
 | Key     | `RUSTFS_SECRET_KEY` |
 
-У RustFS немає окремого користувача консолі — це ті самі ключі, що використовує `mcli`.
+У RustFS немає окремого користувача консолі — це ті самі ключі, що використовує `rcli`.
 
 ## Модель доступу
 
-| Роль | Консоль | mcli / S3-клієнти | Скоуп |
+| Роль | Консоль | rcli / S3-клієнти | Скоуп |
 |---|---|---|---|
 | **Admin** (`RUSTFS_ACCESS_KEY`) | Повний доступ | Усі бакети + admin API | Без обмежень |
 | **User** (провізіонується через `user-create`) | Недоступна | Лише власні бакети `<user>-*` | Ізольований політикою |
@@ -176,7 +176,7 @@ PASS: object survived redeploy
 консолі та використовують усі таргети `make admin-*` / `make user-*`.
 
 **User** — ізольований акаунт, чия політика обмежує S3-доступ до бакетів
-`<user>-*`. Підключається лише через S3-клієнти або `mcli` — **консоль
+`<user>-*`. Підключається лише через S3-клієнти або `rcli` — **консоль
 недоступна**: non-admin юзер перенаправляється на `/rustfs/console/403`,
 оскільки консоль потребує `admin:*` (see [rustfs#2553](https://github.com/rustfs/rustfs/issues/2553)).
 Коли #2553 буде виправлено, scoped-юзери отримають scoped-view консолі
@@ -293,21 +293,52 @@ Traefik і підключається до роутерів S3 і консолі
 `logLevel: DEBUG` встановлено для початкової перевірки. У продакшні знизьте до
 `INFO`, відредагувавши `traefik_config/dynamic/fail2ban.yml` і повторно задеплоївши.
 
-## Управління через mcli
+## Управління через CLI
 
-Makefile надає `mcli`-таргети для управління S3.
-Усі S3-рівневі таргети працюють з RustFS; `mcli` повинен бути у `PATH` (see `make install`).
+Makefile використовує `rcli` (нативний CLI RustFS) для всіх S3 та адмін-операцій.
+`rcli` повинен бути у `PATH` (see `make install-rcli`).
 
 ### Налаштування
 
 ```bash
-make install     # download mcli to /usr/local/bin (once per machine)
-make alias-set   # configure alias "rustfs" (читає креди з запущеного стека)
+make install-rcli   # download rcli to /usr/local/bin (once per machine)
+make alias-set      # створити/оновити root alias 'rustfs' з Docker secrets + встановити активним
 ```
 
-`make alias-set` читає `RUSTFS_ACCESS_KEY` і `RUSTFS_SECRET_KEY` напряму з
-Docker secrets контейнера — креди у `.env` не потрібні.
-Перевизначте через `USERNAME=<key> PASSWORD=<secret>` для підключення до зовнішнього інстансу.
+`make alias-set` (без аргументів) читає креди напряму з Docker secrets контейнера
+і записує `rustfs` як активний alias у `.active_alias`.
+Всі наступні таргети використовують активний alias за замовчуванням.
+
+### Управління alias
+
+Alias — це іменовані профілі підключення, що зберігаються в `rcli`. **Активний alias**
+відстежується у `.active_alias` (виключений з git). Всі таргети за замовчуванням використовують
+активний alias; передайте `ALIAS=<name>` у командному рядку, щоб перевизначити для одного виклику.
+
+| Таргет | Опис |
+|---|---|
+| `alias-set` | Створити/оновити root alias `rustfs` з Docker secrets + встановити активним |
+| `alias-set ALIAS=<name>` | Переключити активний alias на `<name>` (alias повинен вже існувати) |
+| `alias-create ALIAS=<name> ACCESS_KEY=<key> SECRET_KEY=<secret>` | Зареєструвати іменований alias (не змінює активний) |
+| `alias-rm ALIAS=<name>` | Видалити іменований alias (не може бути активним) |
+| `alias-info [ALIAS=<name>]` | Показати інформацію про alias |
+| `alias-list` | Список всіх налаштованих alias |
+
+**Workflow для per-user service accounts** (SA успадковують користувача батьківського alias):
+
+```bash
+make alias-set                                           # створити root alias + встановити активним
+make user-create USER=alice PASSWORD=alice123            # створити користувача alice
+make alias-create ALIAS=alice ACCESS_KEY=alice SECRET_KEY=alice123
+make alias-set ALIAS=alice                               # переключитись на alice
+make svcacct-create                                      # SA parent = alice
+make svcacct-list USER=alice                             # список service accounts alice
+make alias-set                                           # повернутись на root
+make alias-rm ALIAS=alice                                # видалити alias коли готово
+```
+
+`make install-mcli` встановлює MinIO client як резервний варіант (не потрібен
+для звичайної роботи).
 
 ### Операції з бакетами
 
@@ -325,7 +356,7 @@ make bucket-anonymous-download BUCKET=mybucket  # встановити публ�
 бакети `alice-*`, тому бакет одразу доступний цьому користувачу.
 
 Користувачі можуть також створювати власні бакети `<user>-*` безпосередньо
-зі своїх кредів (через mcli або будь-який S3-клієнт) — політика забезпечує
+зі своїх кредів (через rcli або будь-який S3-клієнт) — політика забезпечує
 виконання конвенції іменування на рівні S3. Бакети з іншими префіксами
 відхиляються політикою.
 
@@ -369,23 +400,22 @@ make user-info USER=alice                     # показати політик�
 (ротація кореневих кредів через Docker secrets вимагає зупинки стека — див. §Створення Docker secrets).
 
 ```bash
-# Створити сервісний акаунт під root-адміном:
-make svcacct-create USER=<root-access-key>
-# Вивід: згенерований access-key + secret-key
+# Створити сервісний акаунт (під автентифікованим користувачем alias = root-адмін):
+make svcacct-create
+# Вивід: SERVICE_ACCOUNT=<згенерований-ak> PASSWORD=<згенерований-sk>
 
-# Створити з явним secret key:
-make svcacct-create USER=<root-access-key> PASSWORD=<new-secret>
+# Створити з явним access key та/або secret key:
+make svcacct-create SERVICE_ACCOUNT=mykey PASSWORD=<new-secret>
 
 # Створити з терміном дії (без EXPIRY — постійний; лише ISO 8601 datetime):
 make svcacct-create EXPIRY=2026-12-31T23:59:59Z
-make svcacct-create USER=alice EXPIRY=2027-06-01T00:00:00Z
 
 # Ротувати secret key (генерується автоматично якщо PASSWORD не вказано; старий ключ відхиляється одразу):
 make svcacct-rotate SERVICE_ACCOUNT=<sa-access-key>
 make svcacct-rotate SERVICE_ACCOUNT=<sa-access-key> PASSWORD=<new-secret>
 
-# Список сервісних акаунтів для батьківського юзера:
-make svcacct-list USER=<root-access-key>
+# Список сервісних акаунтів для користувача (за іменем, не за access key):
+make svcacct-list USER=root
 
 # Інфо про конкретний сервісний акаунт:
 make svcacct-info SERVICE_ACCOUNT=<sa-access-key>
@@ -397,12 +427,18 @@ make svcacct-remove SERVICE_ACCOUNT=<sa-access-key>
 Після `svcacct-rotate` переконфігуруйте клієнтів з новим secret key. Старий
 ключ відхиляється одразу — рестарт не потрібен.
 
+### Перевірка здоров'я
+
+```bash
+make ping    # перевірити доступність сервісу RustFS
+make ready   # перевірити готовність залежностей RustFS
+```
+
 ### Admin API
 
-Таргети провізіонування — `user-add`, `user-remove`, `user-list`, `user-disable`,
-`user-enable`, `admin-policy-create`, `admin-policy-attach`, `admin-policy-detach`,
-`admin-policy-list` — працюють з RustFS. Діагностичний ендпоінт `admin-info`
-повертає HTTP 500 (see [rustfs#1571](https://github.com/rustfs/rustfs/issues/1571)).
+Усі таргети провізіонування адмін API працюють з RustFS через rcli: `user-add`,
+`user-remove`, `user-list`, `user-disable`, `user-enable`, `admin-policy-create`,
+`admin-policy-attach`, `admin-policy-detach`, `admin-policy-list`, `admin-info`.
 Для поточного провізіонування використовуйте `user-create` / `user-delete` / `user-info`.
 
 ## Teardown

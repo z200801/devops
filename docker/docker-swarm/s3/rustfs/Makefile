@@ -31,10 +31,13 @@ _OVERRIDES = \
 # CLI variables (defaults sourced from .env at runtime)
 # ============================================================
 
-MINIO_CLI_NAME ?= mcli
-MINIO_CLI      ?= /usr/local/bin/$(MINIO_CLI_NAME)
-MCLI           ?= $(MINIO_CLI)
-INSECURE       ?= --insecure
+MINIO_CLI_NAME  ?= mcli
+MINIO_CLI       ?= /usr/local/bin/$(MINIO_CLI_NAME)
+MCLI            ?= $(MINIO_CLI)
+RUSTFS_CLI_NAME ?= rcli
+RUSTFS_CLI      ?= /usr/local/bin/$(RUSTFS_CLI_NAME)
+RCLI            ?= $(RUSTFS_CLI)
+INSECURE        ?= --insecure
 
 # These default to .env values at runtime; override on the command line if needed.
 ALIAS    ?=
@@ -61,6 +64,9 @@ define _chk_vars
 endef
 
 # Sources .env, validates required stack vars, and resolves ALIAS/SERVER.
+# ALIAS and SERVER can be overridden on the command line (e.g. ALIAS=rustfs-alice)
+# because _source_env uses ${ALIAS:-default} — command-line vars are already in
+# the environment before .env is sourced, and .env does not set ALIAS/SERVER.
 # USERNAME and PASSWORD are NOT defaulted here — targets that need creds
 # must set their own defaults or require explicit values via _chk_var.
 define _source_env
@@ -68,7 +74,7 @@ define _source_env
 	set -a; . ./.env; set +a; \
 	: "$${S3_HOST:?S3_HOST not set in .env}"; \
 	: "$${WEBSECURE_PORT:=19001}"; \
-	ALIAS=$${ALIAS:-rustfs}; \
+	ALIAS=$${ALIAS:-$$(cat .active_alias 2>/dev/null || echo rustfs)}; \
 	SERVER=$${SERVER:-https://$${S3_HOST}:$${WEBSECURE_PORT}}; \
 	export ALIAS SERVER
 endef
@@ -119,7 +125,7 @@ redeploy: deploy  ## deploy + force-restart all services (use after :latest imag
 	docker service update --force $(STACK)_rustfs
 
 .PHONY: test
-test:  ## run mcli smoke test (requires running stack and mcli on PATH)
+test:  ## run smoke test (requires running stack and rcli on PATH)
 	@$(call _source_env); \
 	$(call _read_secrets); \
 	RUSTFS_ACCESS_KEY="$$_ak" RUSTFS_SECRET_KEY="$$_sk" bash test/smoke.sh
@@ -186,13 +192,24 @@ secret-rotate:  ## rotate root credentials (ACCESS_KEY=... SECRET_KEY=...; cause
 	@echo "  SECRET_KEY=$(SECRET_KEY)"
 	@echo ""
 	@echo "Next steps:"
-	@echo "  1. make alias-set              (reconfigure mcli)"
+	@echo "  1. make alias-set              (reconfigure rcli alias)"
 	@echo "  2. Update all S3 clients with the new credentials"
 
 ##@ CLI — S3-level (RustFS)
 
-.PHONY: install
-install:  ## download and install mcli to /usr/local/bin
+.PHONY: install-rcli
+install-rcli:  ## download and install rcli (RustFS native CLI) to /usr/local/bin
+	@_arch=$$(lscpu | grep -Po '^Architecture:\s+\K\S+' | sed 's/x86_64/amd64/; s/aarch64/arm64/') && \
+	_ver=v0.1.31 && \
+	_tar="rustfs-cli-linux-$${_arch}-$${_ver}.tar.gz" && \
+	curl -fLO "https://github.com/rustfs/cli/releases/download/$${_ver}/$${_tar}" && \
+	tar -xzf "$$_tar" rc && \
+	sudo install -m 0755 rc /usr/local/bin/$(RUSTFS_CLI_NAME) && \
+	rm -f rc "$$_tar" && \
+	$(RCLI) --version
+
+.PHONY: install-mcli
+install-mcli:  ## download and install mcli (MinIO client, legacy fallback) to /usr/local/bin
 	@_arch=$$(lscpu | grep -Po '^Architecture:\s+\K\S+' | sed 's/x86_64/amd64/; s/aarch64/arm64/') && \
 	curl https://dl.min.io/client/mc/release/linux-$${_arch}/mc \
 	  --create-dirs -o $${HOME}/minio-binaries/$(MINIO_CLI_NAME) && \
@@ -201,22 +218,61 @@ install:  ## download and install mcli to /usr/local/bin
 	rm -rf $${HOME}/minio-binaries && \
 	$(MCLI) --version
 
-.PHONY: alias-set
-alias-set:  ## configure mcli alias (reads credentials from Docker secrets; override with USERNAME/PASSWORD)
+.PHONY: alias-create
+ifneq (command line,$(origin ALIAS))
+alias-create:
+	@echo "ERROR: ALIAS= required (e.g. make alias-create ALIAS=alice ACCESS_KEY=alice SECRET_KEY=alice123)" >&2; exit 1
+else
+alias-create:  ## register a named alias  ALIAS=<name> ACCESS_KEY=<key> SECRET_KEY=<secret>  (does NOT change active alias)
 	@$(call _source_env); \
+	: "$${ACCESS_KEY:?ACCESS_KEY= required}"; \
+	: "$${SECRET_KEY:?SECRET_KEY= required}"; \
+	$(RCLI) alias set $${ALIAS} $${SERVER} $${ACCESS_KEY} $${SECRET_KEY} $(INSECURE) && \
+	echo "Alias '$$ALIAS' registered (active alias unchanged)."
+endif
+
+.PHONY: alias-set
+ifeq (command line,$(origin ALIAS))
+# ALIAS= given on command line: switch active alias (alias must already exist via alias-create)
+alias-set:  ## set active alias — no ALIAS=: recreate root 'rustfs' from Docker secrets + activate; ALIAS=<name>: activate existing alias
+	@printf '%s' '$(ALIAS)' > .active_alias; \
+	echo "Active alias switched to '$(ALIAS)'."
+else
+# No ALIAS= on command line: create/update root alias from Docker secrets + activate
+alias-set:
+	@$(call _source_env); \
+	ALIAS=rustfs; \
 	$(call _read_secrets); \
 	_u=$${USERNAME:-$$_ak}; \
 	_p=$${PASSWORD:-$$_sk}; \
-	$(MCLI) $(INSECURE) alias set $${ALIAS} $${SERVER} $${_u} $${_p}
+	$(RCLI) alias set $${ALIAS} $${SERVER} $${_u} $${_p} $(INSECURE); \
+	printf '%s' "$$ALIAS" > .active_alias; \
+	echo "Alias '$$ALIAS' configured and set as active."
+endif
 
-.PHONY: alias-remove
-alias-remove:  ## remove mcli alias (ALIAS=rustfs)
+.PHONY: alias-rm
+ifneq (command line,$(origin ALIAS))
+alias-rm:
+	@echo "ERROR: ALIAS= required (e.g. make alias-rm ALIAS=alice)" >&2; exit 1
+else
+alias-rm:  ## remove a named alias  ALIAS=<name>  (must differ from active alias)
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) alias remove $${ALIAS}
+	_active=$$(cat .active_alias 2>/dev/null || echo rustfs); \
+	if [ "$$ALIAS" = "$$_active" ]; then \
+		echo "ERROR: cannot remove active alias '$$ALIAS' — switch first with: make alias-set" >&2; exit 1; \
+	fi; \
+	$(RCLI) alias remove $${ALIAS} && echo "Alias '$$ALIAS' removed."
+endif
+
+.PHONY: alias-info
+alias-info:  ## show info for an alias  [ALIAS=<name>]  (defaults to active alias)
+	@$(call _source_env); \
+	$(RCLI) alias list | grep "^$${ALIAS}[[:space:]]" || { echo "Alias '$$ALIAS' not found."; exit 1; }
 
 .PHONY: alias-list
-alias-list:  ## list all configured mcli aliases
-	@$(MCLI) alias list
+alias-list:  ## list all configured rcli aliases  (* marks active)
+	@_active=$$(cat .active_alias 2>/dev/null || echo rustfs); \
+	$(RCLI) alias list | awk -v a="$$_active" '{ printf "%s %s\n", ($$1==a?"*":" "), $$0 }'
 
 .PHONY: bucket-create
 bucket-create:  ## create bucket (BUCKET=<name> [USER=<owner>] [FLAGS=...])
@@ -224,24 +280,24 @@ bucket-create:  ## create bucket (BUCKET=<name> [USER=<owner>] [FLAGS=...])
 	$(call _chk_var,BUCKET); \
 	_user='$(if $(filter command line,$(origin USER)),$(USER),)'; \
 	_name="$${_user:+$${_user}-}$(BUCKET)"; \
-	$(MCLI) $(INSECURE) mb $${FLAGS} $${ALIAS}/$$_name
+	$(RCLI) mb $${FLAGS} $${ALIAS}/$$_name
 
 .PHONY: bucket-list
 bucket-list:  ## list buckets, or objects if BUCKET is set (BUCKET=<name>)
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) ls $${ALIAS}/$${BUCKET}
+	$(RCLI) ls $${ALIAS}/$${BUCKET}
 
 .PHONY: bucket-remove
 bucket-remove:  ## remove bucket (BUCKET=<name>; FORCE=1 to remove a non-empty bucket)
 	@$(call _source_env); \
 	$(call _chk_var,BUCKET); \
-	$(MCLI) $(INSECURE) rb $${FORCE:+--force} $${ALIAS}/$${BUCKET}
+	$(RCLI) rb $${FORCE:+--force} $${ALIAS}/$${BUCKET}
 
 .PHONY: bucket-anonymous-download
 bucket-anonymous-download:  ## set anonymous download policy on bucket (BUCKET=<name>)
 	@$(call _source_env); \
 	$(call _chk_var,BUCKET); \
-	$(MCLI) $(INSECURE) anonymous set download $${ALIAS}/$${BUCKET}
+	$(RCLI) anonymous set download $${ALIAS}/$${BUCKET}
 
 ##@ User provisioning
 
@@ -251,12 +307,12 @@ user-create:  ## create user + own-buckets RW policy (USER=<name> [PASSWORD=<...
 	@$(call _source_env); \
 	pw="$${PASSWORD:-$$(openssl rand -hex 24)}"; \
 	pol=$$(mktemp); sed 's/__USER__/$(USER)/g' policies/user-rw.json.tpl > "$$pol"; \
-	$(MCLI) $(INSECURE) admin policy detach $${ALIAS} $(USER)-rw --user $(USER) 2>/dev/null || true; \
-	$(MCLI) $(INSECURE) admin policy remove $${ALIAS} $(USER)-rw 2>/dev/null || true; \
-	$(MCLI) $(INSECURE) admin policy create $${ALIAS} $(USER)-rw "$$pol"; \
-	$(MCLI) $(INSECURE) admin user remove $${ALIAS} $(USER) 2>/dev/null || true; \
-	$(MCLI) $(INSECURE) admin user add $${ALIAS} $(USER) "$$pw"; \
-	$(MCLI) $(INSECURE) admin policy attach $${ALIAS} $(USER)-rw --user $(USER); \
+	$(RCLI) admin policy detach $${ALIAS} $(USER)-rw --user $(USER) 2>/dev/null || true; \
+	$(RCLI) admin policy remove $${ALIAS} $(USER)-rw 2>/dev/null || true; \
+	$(RCLI) admin policy create $${ALIAS} $(USER)-rw "$$pol"; \
+	$(RCLI) admin user remove $${ALIAS} $(USER) 2>/dev/null || true; \
+	$(RCLI) admin user add $${ALIAS} $(USER) "$$pw"; \
+	$(RCLI) admin policy attach $${ALIAS} $(USER)-rw --user $(USER); \
 	rm -f "$$pol"; \
 	echo "created: USER=$(USER) PASSWORD=$$pw POLICY=$(USER)-rw"
 
@@ -264,12 +320,12 @@ user-create:  ## create user + own-buckets RW policy (USER=<name> [PASSWORD=<...
 user-delete:  ## delete user + policy (USER=<name>; DELETE_BUCKETS=1 removes <name>-* buckets; FORCE=1 also non-empty)
 	@[ "$(origin USER)" = "command line" ] || { echo "ERROR: pass USER=<name> on the command line" >&2; exit 1; }
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) admin policy detach $${ALIAS} $(USER)-rw --user $(USER) 2>/dev/null || true; \
-	$(MCLI) $(INSECURE) admin user remove $${ALIAS} $(USER) 2>/dev/null || true; \
-	$(MCLI) $(INSECURE) admin policy remove $${ALIAS} $(USER)-rw 2>/dev/null || true; \
+	$(RCLI) admin policy detach $${ALIAS} $(USER)-rw --user $(USER) 2>/dev/null || true; \
+	$(RCLI) admin user remove $${ALIAS} $(USER) 2>/dev/null || true; \
+	$(RCLI) admin policy remove $${ALIAS} $(USER)-rw 2>/dev/null || true; \
 	if [ -n "$(DELETE_BUCKETS)" ]; then \
-	  for b in $$($(MCLI) $(INSECURE) ls $${ALIAS}/ | awk '{print $$NF}' | sed 's#/##' | grep '^$(USER)-'); do \
-	    $(MCLI) $(INSECURE) rb $${FORCE:+--force} $${ALIAS}/$$b; done; \
+	  for b in $$($(RCLI) ls $${ALIAS}/ | awk '{print $$NF}' | sed 's#/##' | grep '^$(USER)-'); do \
+	    $(RCLI) rb $${FORCE:+--force} $${ALIAS}/$$b; done; \
 	fi; \
 	echo "deleted: USER=$(USER)"
 
@@ -281,113 +337,121 @@ user-info:  ## show user info: policy name, buckets, service accounts (USER=<nam
 	echo "$(USER)-rw"; \
 	echo ""; \
 	echo "=== Buckets: $(USER)-* ==="; \
-	$(MCLI) $(INSECURE) ls $${ALIAS}/ 2>/dev/null \
+	$(RCLI) ls $${ALIAS}/ 2>/dev/null \
 	  | grep ' $(USER)-' || echo "(no buckets)"; \
 	echo ""; \
 	echo "=== Service accounts ==="; \
-	$(MCLI) $(INSECURE) admin user svcacct ls $${ALIAS} $(USER) 2>/dev/null \
+	$(RCLI) admin service-account ls $${ALIAS} --user $(USER) 2>/dev/null \
 	  || echo "(none or user not found)"
 
-##@ Admin — MinIO admin API (provisioning works; admin-info returns 500, rustfs#1571)
+##@ Admin — RustFS admin API
 
 .PHONY: user-add
 user-add:  ## add user (USER=<access-key> PASSWORD=<secret-key>)
 	@[ "$(origin USER)" = "command line" ] || { echo "ERROR: pass USER=<name> on the command line" >&2; exit 1; }
 	@$(call _source_env); \
 	$(call _chk_var,PASSWORD); \
-	$(MCLI) $(INSECURE) admin user add $${ALIAS} $(USER) $${PASSWORD}
+	$(RCLI) admin user add $${ALIAS} $(USER) $${PASSWORD}
 
 .PHONY: user-remove
 user-remove:  ## remove user (USER=<access-key>)
 	@[ "$(origin USER)" = "command line" ] || { echo "ERROR: pass USER=<name> on the command line" >&2; exit 1; }
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) admin user remove $${ALIAS} $(USER)
+	$(RCLI) admin user remove $${ALIAS} $(USER)
 
 .PHONY: user-list
 user-list:  ## list users
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) admin user list $${ALIAS}
+	$(RCLI) admin user list $${ALIAS}
 
 .PHONY: user-disable
 user-disable:  ## disable user (USER=<access-key>)
 	@[ "$(origin USER)" = "command line" ] || { echo "ERROR: pass USER=<name> on the command line" >&2; exit 1; }
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) admin user disable $${ALIAS} $(USER)
+	$(RCLI) admin user disable $${ALIAS} $(USER)
 
 .PHONY: user-enable
 user-enable:  ## enable user (USER=<access-key>)
 	@[ "$(origin USER)" = "command line" ] || { echo "ERROR: pass USER=<name> on the command line" >&2; exit 1; }
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) admin user enable $${ALIAS} $(USER)
+	$(RCLI) admin user enable $${ALIAS} $(USER)
 
 .PHONY: admin-info
 admin-info:  ## get server info
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) admin info $${ALIAS}
+	$(RCLI) admin info cluster $${ALIAS}
 
 .PHONY: admin-policy-create
 admin-policy-create:  ## create policy (POLICY=<name> FILE=<path>)
 	@$(call _source_env); \
 	$(call _chk_vars,"POLICY FILE"); \
-	$(MCLI) $(INSECURE) admin policy create $${ALIAS} $${POLICY} $${FILE}
+	$(RCLI) admin policy create $${ALIAS} $${POLICY} $${FILE}
 
 .PHONY: admin-policy-remove
 admin-policy-remove:  ## remove policy (POLICY=<name>)
 	@$(call _source_env); \
 	$(call _chk_var,POLICY); \
-	$(MCLI) $(INSECURE) admin policy remove $${ALIAS} $${POLICY}
+	$(RCLI) admin policy remove $${ALIAS} $${POLICY}
 
 .PHONY: admin-policy-list
 admin-policy-list:  ## list policies
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) admin policy list $${ALIAS}
+	$(RCLI) admin policy list $${ALIAS}
 
 .PHONY: admin-policy-info
 admin-policy-info:  ## get policy info (POLICY=<name>)
 	@$(call _source_env); \
 	$(call _chk_var,POLICY); \
-	$(MCLI) $(INSECURE) admin policy info $${ALIAS} $${POLICY}
+	$(RCLI) admin policy info $${ALIAS} $${POLICY}
 
 .PHONY: admin-policy-entities
 admin-policy-entities:  ## list entities attached to policy (POLICY=<name> [FLAGS='--user <key>'])
 	@$(call _source_env); \
 	$(call _chk_var,POLICY); \
-	$(MCLI) $(INSECURE) admin policy entities $${ALIAS} $${POLICY} $${FLAGS}
+	$(RCLI) admin policy entities $${ALIAS} $${POLICY} $${FLAGS}
 
 .PHONY: admin-policy-attach
 admin-policy-attach:  ## attach policy to user or group (POLICY=<name> FLAGS='--user <key>' | FLAGS='--group <name>')
 	@$(call _source_env); \
 	$(call _chk_vars,"POLICY FLAGS"); \
-	$(MCLI) $(INSECURE) admin policy attach $${ALIAS} $${POLICY} $${FLAGS}
+	$(RCLI) admin policy attach $${ALIAS} $${POLICY} $${FLAGS}
 
 .PHONY: admin-policy-detach
 admin-policy-detach:  ## detach policy from user or group (POLICY=<name> FLAGS='--user <key>' | FLAGS='--group <name>')
 	@$(call _source_env); \
 	$(call _chk_vars,"POLICY FLAGS"); \
-	$(MCLI) $(INSECURE) admin policy detach $${ALIAS} $${POLICY} $${FLAGS}
+	$(RCLI) admin policy detach $${ALIAS} $${POLICY} $${FLAGS}
+
+##@ Health
+
+.PHONY: ping
+ping:  ## check if RustFS service is reachable
+	@$(call _source_env); \
+	$(RCLI) ping $${ALIAS}
+
+.PHONY: ready
+ready:  ## check if RustFS dependencies are ready
+	@$(call _source_env); \
+	$(RCLI) ready $${ALIAS}
 
 ##@ Service accounts
 
-# Service accounts are sub-credentials created under a parent user.
-# They inherit the parent's policy and their secret key can be rotated
-# online (no service restart needed).  Create under the root admin with
-# USER=<parent-access-key> (defaults to access key read from Docker secrets).
+# Service accounts are sub-credentials created under the alias's authenticated
+# user (always the alias's authenticated user — rcli does not support specifying
+# a different parent; use ALIAS=<user-alias> for per-user SAs).
+# They inherit that user's policy and their secret key can be rotated online.
+# rcli positional: <ALIAS> <NEW_SA_ACCESS_KEY> <NEW_SA_SECRET_KEY>
 
 .PHONY: svcacct-create
-svcacct-create:  ## create service account under USER (USER=<parent>; defaults to root from Docker secrets; EXPIRY=YYYY-MM-DDThh:mm:ssZ)
+svcacct-create:  ## create service account  [ALIAS=<alias>] [SERVICE_ACCOUNT=<new-access-key>] [PASSWORD=<new-secret-key>] [EXPIRY=<ISO8601>]
 	@$(call _source_env); \
-	$(call _read_secrets); \
-	_parent='$(if $(filter command line,$(origin USER)),$(USER),)'; \
-	_parent="$${_parent:-$$_ak}"; \
-	_pw=$${PASSWORD:-$$(openssl rand -hex 16)}; \
 	_sa='$(if $(filter command line,$(origin SERVICE_ACCOUNT)),$(SERVICE_ACCOUNT),)'; \
+	_sa="$${_sa:-SA$$(openssl rand -hex 9 | tr 'a-f' 'A-F')}"; \
+	_pw=$${PASSWORD:-$$(openssl rand -hex 16)}; \
 	_expiry='$(if $(filter command line,$(origin EXPIRY)),--expiry $(EXPIRY),)'; \
-	_out=$$($(MCLI) $(INSECURE) --json admin user svcacct add $${ALIAS} $$_parent \
-	  $${_sa:+--access-key $$_sa} --secret-key "$$_pw" $$_expiry 2>&1); \
-	printf '%s\n' "$$_out"; \
-	echo "$$_out" | grep -q '"status":"success"' \
+	$(RCLI) --json admin service-account create $${ALIAS} "$$_sa" "$$_pw" $$_expiry \
 	  || { echo "ERROR: svcacct-create failed" >&2; exit 1; }; \
-	echo "svcacct created under parent=$$_parent PASSWORD=$$_pw"
+	echo "SERVICE_ACCOUNT=$$_sa PASSWORD=$$_pw"
 
 .PHONY: svcacct-rotate
 svcacct-rotate:  ## rotate service account secret key online (SERVICE_ACCOUNT=<access-key> [PASSWORD=<new-secret>])
@@ -395,25 +459,25 @@ svcacct-rotate:  ## rotate service account secret key online (SERVICE_ACCOUNT=<a
 	@$(call _source_env); \
 	_pw='$(if $(filter command line,$(origin PASSWORD)),$(PASSWORD),)'; \
 	_pw="$${_pw:-$$(openssl rand -hex 24)}"; \
-	$(MCLI) $(INSECURE) admin user svcacct edit $${ALIAS} $(SERVICE_ACCOUNT) \
+	$(RCLI) admin service-account update $${ALIAS} $(SERVICE_ACCOUNT) \
 	  --secret-key "$$_pw"; \
 	echo "rotated: SERVICE_ACCOUNT=$(SERVICE_ACCOUNT) PASSWORD=$$_pw"
 
 .PHONY: svcacct-list
-svcacct-list:  ## list service accounts for USER (USER=<parent-access-key>)
-	@[ "$(origin USER)" = "command line" ] || { echo "ERROR: pass USER=<parent-access-key> on the command line" >&2; exit 1; }
+svcacct-list:  ## list service accounts  USER=<username> (e.g. root, alice)  [ALIAS=<alias>]
+	@[ "$(origin USER)" = "command line" ] || { echo "ERROR: pass USER=<username> on the command line" >&2; exit 1; }
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) admin user svcacct ls $${ALIAS} $(USER)
+	$(RCLI) admin service-account ls $${ALIAS} --user $(USER)
 
 .PHONY: svcacct-info
 svcacct-info:  ## show info for service account (SERVICE_ACCOUNT=<access-key>)
 	@[ "$(origin SERVICE_ACCOUNT)" = "command line" ] || { echo "ERROR: pass SERVICE_ACCOUNT=<access-key> on the command line" >&2; exit 1; }
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) admin user svcacct info $${ALIAS} $(SERVICE_ACCOUNT)
+	$(RCLI) admin service-account info $${ALIAS} $(SERVICE_ACCOUNT)
 
 .PHONY: svcacct-remove
 svcacct-remove:  ## remove service account (SERVICE_ACCOUNT=<access-key>)
 	@[ "$(origin SERVICE_ACCOUNT)" = "command line" ] || { echo "ERROR: pass SERVICE_ACCOUNT=<access-key> on the command line" >&2; exit 1; }
 	@$(call _source_env); \
-	$(MCLI) $(INSECURE) admin user svcacct rm $${ALIAS} $(SERVICE_ACCOUNT); \
+	$(RCLI) admin service-account rm $${ALIAS} $(SERVICE_ACCOUNT); \
 	echo "removed: SERVICE_ACCOUNT=$(SERVICE_ACCOUNT)"

@@ -2,7 +2,7 @@
 # Smoke test for the rustfs stack.
 #
 # Prerequisites:
-#   - mcli (MinIO client) on PATH (installed as mcli, not mc)
+#   - rcli (RustFS CLI) on PATH (installed as rcli)
 #   - .env present at the project root with S3_HOST, WEBSECURE_PORT
 #   - S3_HOST resolves to the Swarm node (DNS or /etc/hosts entry)
 #   - Credentials passed via env: RUSTFS_ACCESS_KEY, RUSTFS_SECRET_KEY
@@ -53,25 +53,25 @@ ALIAS_URL="https://${S3_HOST}:${WEBSECURE_PORT}"
 
 cleanup() {
   rm -f "${TMP_PUT}" "${TMP_GET}"
-  mcli alias remove "${ALIAS}" >/dev/null 2>&1 || true
+  rcli alias remove "${ALIAS}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 echo "==> alias ${ALIAS} -> ${ALIAS_URL}"
-mcli alias set "${ALIAS}" "${ALIAS_URL}" \
+rcli alias set "${ALIAS}" "${ALIAS_URL}" \
   "${RUSTFS_ACCESS_KEY}" "${RUSTFS_SECRET_KEY}" \
-  --insecure --api S3v4 >/dev/null
+  --insecure >/dev/null
 
 echo "==> mb ${BUCKET}"
-mcli mb --insecure --ignore-existing "${ALIAS}/${BUCKET}"
+rcli mb --ignore-existing "${ALIAS}/${BUCKET}"
 
 printf '%s\n' "${OBJ_CONTENT}" > "${TMP_PUT}"
 
 echo "==> cp up"
-mcli cp --insecure "${TMP_PUT}" "${ALIAS}/${BUCKET}/${OBJ_KEY}"
+rcli cp "${TMP_PUT}" "${ALIAS}/${BUCKET}/${OBJ_KEY}"
 
 echo "==> cp down + diff"
-mcli cp --insecure "${ALIAS}/${BUCKET}/${OBJ_KEY}" "${TMP_GET}"
+rcli cp "${ALIAS}/${BUCKET}/${OBJ_KEY}" "${TMP_GET}"
 diff "${TMP_PUT}" "${TMP_GET}"
 echo "PASS: upload/download match"
 
@@ -91,7 +91,7 @@ if [[ "${SKIP_REDEPLOY}" -eq 0 ]]; then
   done
 
   echo "==> cp down after redeploy + diff"
-  mcli cp --insecure "${ALIAS}/${BUCKET}/${OBJ_KEY}" "${TMP_GET}"
+  rcli cp "${ALIAS}/${BUCKET}/${OBJ_KEY}" "${TMP_GET}"
   diff "${TMP_PUT}" "${TMP_GET}"
   echo "PASS: object survived redeploy"
 fi

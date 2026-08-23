@@ -31,7 +31,7 @@ Overlay network: `rustfs-edge` (name pinned, attachable).
 
 - Docker Engine with Swarm initialised (`docker swarm init` on the node)
 - `make`, `bash`
-- `mcli` (MinIO client, installed as `mcli` — **not** `mc`) for smoke tests
+- `rcli` (RustFS CLI, installed as `rcli`) for smoke tests and admin operations
 - Outbound internet from the Swarm node at first deploy (Traefik downloads
   the `tomMoulard/fail2ban` plugin from the plugin catalog)
 
@@ -74,7 +74,7 @@ persist across stack redeploys.
 > make secret-rotate ACCESS_KEY=<new-key> SECRET_KEY=<new-secret>
 > ```
 >
-> After rotation, reconfigure mcli (`make alias-set`) and update all S3
+> After rotation, reconfigure rcli (`make alias-set`) and update all S3
 > clients with the new credentials. For zero-downtime credential rotation,
 > use service accounts instead (see [§Service accounts](#service-accounts-credential-rotation)).
 
@@ -127,9 +127,9 @@ docker service inspect rustfs_rustfs --format '{{json .Endpoint.Ports}}'
 # Expected: null
 ```
 
-### 5. Smoke test (mcli)
+### 5. Smoke test (rcli)
 
-Requires `S3_HOST` to resolve to the node, `mcli` on `PATH`, and the
+Requires `S3_HOST` to resolve to the node, `rcli` on `PATH`, and the
 stack running (credentials are read from the container's Docker secrets):
 
 ```bash
@@ -137,7 +137,7 @@ make test
 ```
 
 The script:
-1. Configures an mcli alias pointing to `https://${S3_HOST}:${WEBSECURE_PORT}`
+1. Configures an rcli alias pointing to `https://${S3_HOST}:${WEBSECURE_PORT}`
    (path-style, self-signed TLS, S3v4 signature).
 2. Creates bucket `smoke-test`.
 3. Uploads `smoke.txt`, downloads it, and verifies with `diff`.
@@ -165,11 +165,11 @@ has two fields that map to the S3 root credentials (from Docker secrets):
 | Account | `RUSTFS_ACCESS_KEY` |
 | Key     | `RUSTFS_SECRET_KEY` |
 
-RustFS has no separate console user — these are the same keys used by `mcli`.
+RustFS has no separate console user — these are the same keys used by `rcli`.
 
 ## Access model
 
-| Role | Console | mcli / S3 clients | Scope |
+| Role | Console | rcli / S3 clients | Scope |
 |---|---|---|---|
 | **Admin** (`RUSTFS_ACCESS_KEY`) | Full access | All buckets + admin API | Unlimited |
 | **User** (provisioned via `user-create`) | Not available | Own `<user>-*` buckets only | Isolated by policy |
@@ -178,7 +178,7 @@ RustFS has no separate console user — these are the same keys used by `mcli`.
 to the web console and use all `make admin-*` / `make user-*` targets.
 
 **Users** are isolated accounts whose policy restricts S3 access to their
-own `<user>-*` buckets. They connect via S3 clients or `mcli` only — **the
+own `<user>-*` buckets. They connect via S3 clients or `rcli` only — **the
 console is not available to non-admin users**: a scoped user is redirected
 to `/rustfs/console/403` because the console currently requires `admin:*`
 permissions (see [rustfs#2553](https://github.com/rustfs/rustfs/issues/2553)).
@@ -296,21 +296,52 @@ run `make deploy` — the new content hash triggers a new docker config object.
 `logLevel: DEBUG` is set for initial verification. Lower to `INFO` in
 production by editing `traefik_config/dynamic/fail2ban.yml` and redeploying.
 
-## mcli management
+## CLI management
 
-The Makefile exposes `mcli` targets for S3 management.
-All S3-level targets work against RustFS; `mcli` must be on `PATH` (see `make install`).
+The Makefile uses `rcli` (RustFS native CLI) for all S3 and admin operations.
+`rcli` must be on `PATH` (see `make install-rcli`).
 
 ### Setup
 
 ```bash
-make install     # download mcli to /usr/local/bin (once per machine)
-make alias-set   # configure alias "rustfs" (reads credentials from running stack)
+make install-rcli   # download rcli to /usr/local/bin (once per machine)
+make alias-set      # create/update root 'rustfs' alias from Docker secrets + set active
 ```
 
-`make alias-set` reads `RUSTFS_ACCESS_KEY` and `RUSTFS_SECRET_KEY` directly from
-the running container's Docker secrets — no credentials needed in `.env`.
-Override with `USERNAME=<key> PASSWORD=<secret>` to connect to an external instance.
+`make alias-set` (no args) reads credentials directly from the running container's
+Docker secrets and writes `rustfs` as the active alias to `.active_alias`.
+All subsequent targets use the active alias by default.
+
+### Alias management
+
+Aliases are named connection profiles stored by `rcli`. The **active alias** is
+tracked in `.active_alias` (git-ignored). All targets default to the active alias;
+pass `ALIAS=<name>` on the command line to override for a single invocation.
+
+| Target | Description |
+|---|---|
+| `alias-set` | Create/update root `rustfs` alias from Docker secrets + set active |
+| `alias-set ALIAS=<name>` | Switch active alias to `<name>` (alias must already exist) |
+| `alias-create ALIAS=<name> ACCESS_KEY=<key> SECRET_KEY=<secret>` | Register a named alias (does not change active) |
+| `alias-rm ALIAS=<name>` | Remove a named alias (cannot be the active alias) |
+| `alias-info [ALIAS=<name>]` | Show connection info for an alias |
+| `alias-list` | List all configured aliases |
+
+**Per-user service account workflow** (service accounts inherit the parent alias's user):
+
+```bash
+make alias-set                                           # create root alias + set active
+make user-create USER=alice PASSWORD=alice123            # create user alice
+make alias-create ALIAS=alice ACCESS_KEY=alice SECRET_KEY=alice123
+make alias-set ALIAS=alice                               # switch to alice
+make svcacct-create                                      # SA parent = alice
+make svcacct-list USER=alice                             # list alice's service accounts
+make alias-set                                           # switch back to root
+make alias-rm ALIAS=alice                                # remove alias when done
+```
+
+`make install-mcli` installs the MinIO client as a legacy fallback (not required
+for normal operation).
 
 ### Bucket operations
 
@@ -328,7 +359,7 @@ When `USER=<name>` is provided, the bucket name is automatically prefixed with
 `alice-*` buckets, so the bucket is immediately accessible to that user.
 
 Users can also create their own `<user>-*` buckets directly from their own
-credentials (via mcli or any S3 client) — the policy enforces the naming
+credentials (via rcli or any S3 client) — the policy enforces the naming
 convention at the S3 level. Buckets with other prefixes are denied by policy.
 
 ### User provisioning
@@ -370,23 +401,22 @@ restart needed. This is the recommended zero-downtime rotation path
 (root credential rotation via Docker secrets requires a stack stop — see §Create Docker secrets).
 
 ```bash
-# Create a service account under the root admin:
-make svcacct-create USER=<root-access-key>
-# Output: generated access-key + secret-key
+# Create a service account (under the alias's authenticated user = root admin):
+make svcacct-create
+# Output: SERVICE_ACCOUNT=<generated-ak> PASSWORD=<generated-sk>
 
-# Create with an explicit secret key:
-make svcacct-create USER=<root-access-key> PASSWORD=<new-secret>
+# Create with an explicit access key and/or secret key:
+make svcacct-create SERVICE_ACCOUNT=mykey PASSWORD=<new-secret>
 
 # Create with an expiry (permanent if omitted; ISO 8601 datetime only):
 make svcacct-create EXPIRY=2026-12-31T23:59:59Z
-make svcacct-create USER=alice EXPIRY=2027-06-01T00:00:00Z
 
 # Rotate the secret key (auto-generates if PASSWORD omitted; old key rejected immediately):
 make svcacct-rotate SERVICE_ACCOUNT=<sa-access-key>
 make svcacct-rotate SERVICE_ACCOUNT=<sa-access-key> PASSWORD=<new-secret>
 
-# List service accounts for a parent user:
-make svcacct-list USER=<root-access-key>
+# List service accounts for a user (by username, not access key):
+make svcacct-list USER=root
 
 # Show info for a specific service account:
 make svcacct-info SERVICE_ACCOUNT=<sa-access-key>
@@ -398,12 +428,18 @@ make svcacct-remove SERVICE_ACCOUNT=<sa-access-key>
 After `svcacct-rotate`, reconfigure clients with the new secret key. The old
 key is rejected immediately — no restart required.
 
+### Health
+
+```bash
+make ping    # check if RustFS service is reachable
+make ready   # check if RustFS dependencies are ready
+```
+
 ### Admin API
 
-Provisioning targets — `user-add`, `user-remove`, `user-list`, `user-disable`,
-`user-enable`, `admin-policy-create`, `admin-policy-attach`, `admin-policy-detach`,
-`admin-policy-list` — work against RustFS. The diagnostic endpoint `admin-info`
-returns HTTP 500 (see [rustfs#1571](https://github.com/rustfs/rustfs/issues/1571)).
+All admin provisioning targets work against RustFS via rcli: `user-add`,
+`user-remove`, `user-list`, `user-disable`, `user-enable`, `admin-policy-create`,
+`admin-policy-attach`, `admin-policy-detach`, `admin-policy-list`, `admin-info`.
 For day-to-day provisioning, prefer `user-create` / `user-delete` / `user-info` above.
 
 ## Teardown
