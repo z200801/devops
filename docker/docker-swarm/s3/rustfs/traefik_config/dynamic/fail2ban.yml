@@ -1,0 +1,25 @@
+http:
+  middlewares:
+    fail2ban:
+      plugin:
+        fail2ban:
+          # DEBUG to see explicit ban log lines; lower to INFO in production.
+          logLevel: DEBUG
+          # Key the ban on the X-Real-IP header set by the upstream nginx proxy.
+          # Without this, fail2ban sees the Docker ingress IP (e.g. 10.0.0.2)
+          # and bans it — blocking all traffic, not just the attacker.
+          # Requires nginx to send `proxy_set_header X-Real-IP $remote_addr`.
+          sourceCriterion:
+            requestHeaderName: "X-Real-IP"
+          rules:
+            bantime: "3h"
+            findtime: "10m"
+            # 20 retries before ban — large because S3 legitimately returns
+            # 403 for unauthenticated/expired-signature requests, so a
+            # one-off wrong key must not ban a legitimate client.
+            maxretry: 20
+            statuscode: "401,403,429"
+          allowlist:
+            ip:
+              - "127.0.0.1/32"
+              - "::1/128"

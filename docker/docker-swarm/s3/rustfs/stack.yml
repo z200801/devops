@@ -1,0 +1,143 @@
+version: "3.9"
+
+services:
+  traefik:
+    image: traefik:v3.7.11
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+    ports:
+      - "${WEB_PORT:-19000}:80"
+      - "${WEBSECURE_PORT:-19001}:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    configs:
+      - source: traefik_static
+        target: /etc/traefik/traefik.yml
+      - source: traefik_fail2ban
+        target: /etc/traefik/dynamic/fail2ban.yml
+    networks:
+      - rustfs-edge
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 128M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_VOLUMES: "/data"
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY_FILE: /run/secrets/rustfs_access_key
+      RUSTFS_SECRET_KEY_FILE: /run/secrets/rustfs_secret_key
+      RUSTFS_OBS_LOG_DIRECTORY: "/logs"
+      RUSTFS_OBS_LOGGER_LEVEL: "${RUSTFS_OBS_LOGGER_LEVEL:-warn}"
+    secrets:
+      - rustfs_access_key
+      - rustfs_secret_key
+    volumes:
+      - rustfs-data:/data
+      - rustfs-logs:/logs
+    networks:
+      - rustfs-edge
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.2"
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        delay: 15s
+        monitor: 30s
+        max_failure_ratio: 0
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: pause
+        delay: 10s
+        monitor: 30s
+        max_failure_ratio: 0
+      labels:
+        - traefik.enable=true
+        - traefik.constraint=rustfs
+        - traefik.swarm.network=rustfs-edge
+        - traefik.http.routers.rustfs-s3.rule=Host(`${S3_HOST}`)
+        - traefik.http.routers.rustfs-s3.entrypoints=websecure
+        - traefik.http.routers.rustfs-s3.tls=true
+        - traefik.http.routers.rustfs-s3.service=rustfs-s3
+        - traefik.http.routers.rustfs-s3.middlewares=fail2ban@file
+        - traefik.http.services.rustfs-s3.loadbalancer.server.port=9000
+        - traefik.http.routers.rustfs-console.rule=Host(`${CONSOLE_HOST}`)
+        - traefik.http.routers.rustfs-console.entrypoints=websecure
+        - traefik.http.routers.rustfs-console.tls=true
+        - traefik.http.routers.rustfs-console.service=rustfs-console
+        - traefik.http.routers.rustfs-console.middlewares=fail2ban@file
+        - traefik.http.services.rustfs-console.loadbalancer.server.port=9001
+
+networks:
+  rustfs-edge:
+    name: rustfs-edge
+    driver: overlay
+    attachable: true
+    driver_opts:
+      com.docker.network.driver.mtu: 1300
+
+volumes:
+  rustfs-data:
+  rustfs-logs:
+
+secrets:
+  rustfs_access_key:
+    external: true
+  rustfs_secret_key:
+    external: true
+
+configs:
+  traefik_static:
+    external: true
+    name: ${TRAEFIK_STATIC}
+  traefik_fail2ban:
+    external: true
+    name: ${TRAEFIK_FAIL2BAN}

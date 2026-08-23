@@ -1,0 +1,46 @@
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+    forwardedHeaders:
+      # Upstream host proxy address — the Docker ingress/gateway IP that
+      # Traefik actually sees as the peer, NOT the nginx LAN IP.
+      # Measure: docker service logs rustfs_traefik | grep -i clientaddr
+      # Then replace 10.0.0.0/8 with the real CIDR and `make deploy`.
+      # TRUSTED_PROXY_IPS (from .env) documents the target value.
+      trustedIPs:
+        - "10.0.0.0/8"
+  websecure:
+    address: ":443"
+    forwardedHeaders:
+      trustedIPs:
+        - "10.0.0.0/8"
+  traefik:
+    address: ":8080"
+
+ping:
+  entryPoint: traefik
+
+providers:
+  swarm:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: rustfs-edge
+    constraints: "Label(`traefik.constraint`,`rustfs`)"
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+experimental:
+  plugins:
+    fail2ban:
+      moduleName: github.com/tomMoulard/fail2ban
+      version: v0.9.0
+
+log:
+  level: INFO
