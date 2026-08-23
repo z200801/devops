@@ -103,7 +103,7 @@ services:
         - traefik.enable=true
         - traefik.constraint=rustfs
         - traefik.swarm.network=rustfs-edge
-        - traefik.http.routers.rustfs-s3.rule=Host(`${S3_HOST}`)
+        - traefik.http.routers.rustfs-s3.rule=Host(`${S3_HOST}`) || Host(`127.0.0.1`)
         - traefik.http.routers.rustfs-s3.entrypoints=websecure
         - traefik.http.routers.rustfs-s3.tls=true
         - traefik.http.routers.rustfs-s3.service=rustfs-s3
