@@ -1,0 +1,55 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ["alertname", "cluster", "node", "stack"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: "discord"
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: "discord-critical"
+      group_wait: 10s
+      repeat_interval: 1h
+    - matchers:
+        - severity = "warning"
+      receiver: "discord"
+      repeat_interval: 4h
+
+receivers:
+  - name: "discord"
+    discord_configs:
+      - webhook_url: "${DISCORD_WEBHOOK_URL}"
+        title: |-
+          [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+        message: |-
+          {{ range .Alerts }}
+          **Severity:** {{ .Labels.severity | toUpper }}
+          **Node:** {{ .Labels.node }}
+          **Stack:** {{ .Labels.stack }}
+          **Summary:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          {{ end }}
+
+  - name: "discord-critical"
+    discord_configs:
+      - webhook_url: "${DISCORD_WEBHOOK_URL}"
+        title: |-
+          🚨 [CRITICAL{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+        message: |-
+          {{ range .Alerts }}
+          🔴 **Node:** {{ .Labels.node }}
+          **Stack:** {{ .Labels.stack }}
+          **Summary:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Labels:** {{ range .Labels.SortedPairs }}{{ .Name }}={{ .Value }} {{ end }}
+          {{ end }}
+
+inhibit_rules:
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ["alertname", "node"]

@@ -1,0 +1,26 @@
+services:
+  registry:
+    image: registry:2
+    ports:
+      - "5001:5000"
+    environment:
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /var/lib/registry
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+      REGISTRY_HTTP_ADDR: 0.0.0.0:5000
+      REGISTRY_HTTP_SECRET_FILE: /run/secrets/registry_http_secret_test
+    volumes:
+      - registry-test-data:/var/lib/registry
+    secrets:
+      - registry_http_secret_test
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+volumes:
+  registry-test-data:
+    driver: local
+
+secrets:
+  registry_http_secret_test:
+    external: true
