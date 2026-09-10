@@ -1,0 +1,210 @@
+{
+  "id": null,
+  "uid": "swarm-scheduler-exporter",
+  "title": "Swarm Scheduler Exporter",
+  "tags": ["swarm", "docker"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Desired vs Running Replicas",
+      "description": "Desired and running replica counts per service.",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "victoriametrics"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "swarm_service_desired_replicas",
+          "legendFormat": "desired — {{service}}"
+        },
+        {
+          "refId": "B",
+          "expr": "swarm_service_running_replicas",
+          "legendFormat": "running — {{service}}"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "short", "min": 0}
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Services Not at Desired",
+      "description": "Count of services where running replicas do not match desired.",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "victoriametrics"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(swarm_service_at_desired == 0) or vector(0)",
+          "legendFormat": "services degraded"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "colorMode": "background",
+        "graphMode": "none",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Degraded Services",
+      "description": "Services where running replicas do not match desired.",
+      "gridPos": {"h": 4, "w": 18, "x": 6, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "victoriametrics"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "swarm_service_at_desired == 0",
+          "legendFormat": "{{service}}",
+          "instant": true
+        }
+      ],
+      "options": {"sortBy": [{"displayName": "service"}]},
+      "transformations": [
+        {"id": "labelsToFields", "options": {"valueLabel": "service"}},
+        {"id": "organize", "options": {"excludeByName": {"Time": true, "Value": true}}}
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Task State Breakdown",
+      "description": "Replica counts per service and task state.",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "victoriametrics"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service, state) (swarm_task_replicas_state)",
+          "legendFormat": "{{service}} / {{state}}"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "short", "min": 0}
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Cluster Nodes by State",
+      "description": "Node counts grouped by role, availability, and status.",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 20},
+      "datasource": {"type": "prometheus", "uid": "victoriametrics"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "swarm_cluster_nodes_by_state",
+          "legendFormat": "{{role}} / {{availability}} / {{status}}",
+          "instant": true
+        }
+      ],
+      "options": {"sortBy": [{"displayName": "role"}]},
+      "transformations": [
+        {"id": "labelsToFields", "options": {"mode": "rows"}}
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Update / Rollback in Progress",
+      "description": "Services currently in an update or rollback state.",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 20},
+      "datasource": {"type": "prometheus", "uid": "victoriametrics"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "swarm_service_update_state_info",
+          "legendFormat": "{{service}} — {{update_state}}",
+          "instant": true
+        }
+      ],
+      "options": {},
+      "transformations": [
+        {"id": "labelsToFields", "options": {"mode": "rows"}}
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Exporter Health",
+      "description": "1 = healthy, 0 = unhealthy.",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 26},
+      "datasource": {"type": "prometheus", "uid": "victoriametrics"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "swarm_exporter_health",
+          "legendFormat": "health"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Exporter Poll Errors",
+      "description": "Rate of poll errors from the swarm exporter.",
+      "gridPos": {"h": 4, "w": 18, "x": 6, "y": 26},
+      "datasource": {"type": "prometheus", "uid": "victoriametrics"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(swarm_exporter_poll_errors_total[5m])",
+          "legendFormat": "poll errors/s"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single"}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "short", "min": 0}
+      }
+    }
+  ]
+}

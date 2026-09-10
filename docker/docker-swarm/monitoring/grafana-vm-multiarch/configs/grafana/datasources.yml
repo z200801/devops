@@ -1,0 +1,35 @@
+apiVersion: 1
+
+datasources:
+  - name: VictoriaMetrics
+    type: prometheus
+    uid: victoriametrics
+    url: http://victoriametrics:8428
+    access: proxy
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"
+      httpMethod: POST
+      manageAlerts: false
+
+  - name: Loki
+    type: loki
+    uid: loki
+    url: http://loki:3100
+    access: proxy
+    isDefault: false
+    editable: false
+    jsonData:
+      maxLines: 5000
+
+  - name: Alertmanager
+    type: alertmanager
+    uid: alertmanager
+    url: http://alertmanager:9093
+    access: proxy
+    isDefault: false
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false
