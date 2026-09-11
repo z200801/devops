@@ -77,7 +77,9 @@ scrape_configs:
         target_label: __address__
 
   # ── Docker daemon ── overlay network + swarm internals per manager node ───
-  # Requires "metrics-addr": "172.18.0.1:9323" in /etc/docker/daemon.json
+  # Target is set at configs-create/configs-rotate time via DOCKER_METRICS_ADDR
+  # (default 172.17.0.1:9323 for docker0). Set per host to where dockerd
+  # binds its metrics endpoint in /etc/docker/daemon.json.
   - job_name: "docker-daemon"
     dockerswarm_sd_configs:
       - host: "unix:///var/run/docker.sock"
@@ -88,8 +90,10 @@ scrape_configs:
         action: keep
       - source_labels: [__meta_dockerswarm_node_hostname]
         target_label: node
-      - replacement: "172.18.0.1:9323"
-        target_label: __address__
+      - target_label: __address__
+        replacement: "${DOCKER_METRICS_ADDR}"
+      - target_label: service
+        replacement: docker-daemon
 
   # ── Swarm Exporter ── stacks, services, task counts ───────────────────────
   - job_name: "swarm-exporter"
@@ -123,3 +127,10 @@ scrape_configs:
       - targets: ["alertmanager:9093"]
         labels:
           service: "alertmanager"
+
+  # ── vmalert self-monitoring ───────────────────────────────────────────────
+  - job_name: "vmalert"
+    static_configs:
+      - targets: ["vmalert:8880"]
+        labels:
+          service: "vmalert"

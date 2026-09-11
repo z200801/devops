@@ -20,22 +20,33 @@ volumes:
 configs:
   scrape_config:
     external: true
+    name: "${CONFIG_PREFIX:-mon2}_scrape_config"
   loki_config:
     external: true
+    name: "${CONFIG_PREFIX:-mon2}_loki_config"
   promtail_config:
     external: true
+    name: "${CONFIG_PREFIX:-mon2}_promtail_config"
   alertmanager_config:
     external: true
+    name: "${CONFIG_PREFIX:-mon2}_alertmanager_config"
   grafana_datasources:
     external: true
+    name: "${CONFIG_PREFIX:-mon2}_grafana_datasources"
   grafana_dashboards_provider:
     external: true
+    name: "${CONFIG_PREFIX:-mon2}_grafana_dashboards_provider"
+  vmalert_rules:
+    external: true
+    name: "${CONFIG_PREFIX:-mon2}_vmalert_rules"
 
 secrets:
   grafana_admin_user:
     external: true
+    name: "${SECRET_PREFIX:-mon2}_grafana_admin_user"
   grafana_admin_password:
     external: true
+    name: "${SECRET_PREFIX:-mon2}_grafana_admin_password"
 
 services:
 
@@ -419,6 +430,54 @@ services:
     configs:
       - source: alertmanager_config
         target: /etc/alertmanager/alertmanager.yml
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: pause
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 32M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── vmalert — rule evaluation + Alertmanager notification ────────────────
+  vmalert:
+    image: victoriametrics/vmalert:latest
+    networks:
+      - monitoring
+    command:
+      - "-datasource.url=http://victoriametrics:8428"
+      - "-notifier.url=http://alertmanager:9093"
+      - "-rule=/etc/vmalert/rules/*.yml"
+      - "-remoteWrite.url=http://victoriametrics:8428"
+      - "-remoteRead.url=http://victoriametrics:8428"
+      - "-evaluationInterval=30s"
+      - "-httpListenAddr=:8880"
+    configs:
+      - source: vmalert_rules
+        target: /etc/vmalert/rules/alerts.yml
     deploy:
       mode: replicated
       replicas: 1

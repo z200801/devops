@@ -1,0 +1,83 @@
+groups:
+
+  # ── targets — scrape reachability ─────────────────────────────────────────
+  - name: targets
+    rules:
+      - alert: CoreServiceDown
+        expr: up{service=~"victoriametrics|alertmanager|loki|grafana|vmalert"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Core service {{ if $labels.service }}{{ $labels.service }}{{ else }}{{ $labels.job }}{{ end }} is down"
+          description: "VictoriaMetrics target '{{ if $labels.service }}{{ $labels.service }}{{ else }}{{ $labels.job }}{{ end }}' has been unreachable for more than 5 minutes."
+
+      - alert: ServiceDown
+        expr: up{service!~"victoriametrics|alertmanager|loki|grafana|vmalert"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Service {{ if $labels.service }}{{ $labels.service }}{{ else }}{{ $labels.job }}{{ end }} is down on node {{ $labels.node }}"
+          description: "VictoriaMetrics target '{{ if $labels.service }}{{ $labels.service }}{{ else }}{{ $labels.job }}{{ end }}' on node '{{ $labels.node }}' has been unreachable for more than 5 minutes."
+
+  # ── node — host resource saturation (node-exporter) ───────────────────────
+  - name: node
+    rules:
+      - alert: NodeDiskAlmostFull
+        expr: >
+          node_filesystem_avail_bytes{fstype!~"tmpfs|devtmpfs|overlay"}
+          / node_filesystem_size_bytes{fstype!~"tmpfs|devtmpfs|overlay"}
+          < 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk almost full on {{ $labels.node }} ({{ $labels.mountpoint }})"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.node }} has less than 10% free space."
+
+      - alert: NodeDiskCritical
+        expr: >
+          node_filesystem_avail_bytes{fstype!~"tmpfs|devtmpfs|overlay"}
+          / node_filesystem_size_bytes{fstype!~"tmpfs|devtmpfs|overlay"}
+          < 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk critically full on {{ $labels.node }} ({{ $labels.mountpoint }})"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.node }} has less than 5% free space."
+
+      - alert: NodeMemoryPressure
+        expr: >
+          1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes
+          > 0.90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.node }}"
+          description: "Node {{ $labels.node }} memory usage exceeds 90%."
+
+      - alert: NodeCPUSaturation
+        expr: >
+          1 - avg by (node) (rate(node_cpu_seconds_total{mode="idle"}[5m]))
+          > 0.90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.node }}"
+          description: "Node {{ $labels.node }} CPU busy time exceeds 90% averaged over 5 minutes for the last 15 minutes."
+
+  # ── swarm — service replica health (leinardi swarm-scheduler-exporter) ────
+  - name: swarm
+    rules:
+      - alert: SwarmServiceNotAtDesired
+        expr: swarm_service_at_desired == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Swarm service {{ $labels.service }} not at desired replica count"
+          description: "Service {{ $labels.service }} has not reached its desired replica count for more than 10 minutes."

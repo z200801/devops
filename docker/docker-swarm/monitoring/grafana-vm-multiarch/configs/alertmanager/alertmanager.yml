@@ -27,6 +27,7 @@ receivers:
         message: |-
           {{ range .Alerts }}
           **Severity:** {{ .Labels.severity | toUpper }}
+          **Service:** {{ if .Labels.service }}{{ .Labels.service }}{{ else if .Labels.job }}{{ .Labels.job }}{{ else }}{{ .Labels.instance }}{{ end }}
           **Node:** {{ .Labels.node }}
           **Stack:** {{ .Labels.stack }}
           **Summary:** {{ .Annotations.summary }}
@@ -40,7 +41,8 @@ receivers:
           🚨 [CRITICAL{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
         message: |-
           {{ range .Alerts }}
-          🔴 **Node:** {{ .Labels.node }}
+          🔴 **Service:** {{ if .Labels.service }}{{ .Labels.service }}{{ else if .Labels.job }}{{ .Labels.job }}{{ else }}{{ .Labels.instance }}{{ end }}
+          **Node:** {{ .Labels.node }}
           **Stack:** {{ .Labels.stack }}
           **Summary:** {{ .Annotations.summary }}
           **Description:** {{ .Annotations.description }}

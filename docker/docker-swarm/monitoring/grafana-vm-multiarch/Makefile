@@ -20,18 +20,21 @@ GIT_BRANCH_DEVOPS    ?= main
 GIT_REPO_DIR         ?= $(PROJECTS_DIR)/repo/h2-dswarm
 
 # ---------- Secrets ----------
-SECRET_GRAFANA_USER     ?= grafana_admin_user
-SECRET_GRAFANA_PASSWORD ?= grafana_admin_password
+SECRET_PREFIX           ?= $(STACK_NAME)
+SECRET_GRAFANA_USER     ?= $(SECRET_PREFIX)_grafana_admin_user
+SECRET_GRAFANA_PASSWORD ?= $(SECRET_PREFIX)_grafana_admin_password
 GRAFANA_ADMIN_USER      ?= admin
 GRAFANA_ADMIN_PASSWORD  ?= changeme
 
 # ---------- Configs ----------
-CONFIG_SCRAPE           ?= scrape_config
-CONFIG_LOKI             ?= loki_config
-CONFIG_PROMTAIL         ?= promtail_config
-CONFIG_ALERTMANAGER     ?= alertmanager_config
-CONFIG_GRAFANA_DS       ?= grafana_datasources
-CONFIG_GRAFANA_DASH     ?= grafana_dashboards_provider
+CONFIG_PREFIX           ?= $(STACK_NAME)
+CONFIG_SCRAPE           ?= $(CONFIG_PREFIX)_scrape_config
+CONFIG_LOKI             ?= $(CONFIG_PREFIX)_loki_config
+CONFIG_PROMTAIL         ?= $(CONFIG_PREFIX)_promtail_config
+CONFIG_ALERTMANAGER     ?= $(CONFIG_PREFIX)_alertmanager_config
+CONFIG_GRAFANA_DS       ?= $(CONFIG_PREFIX)_grafana_datasources
+CONFIG_GRAFANA_DASH     ?= $(CONFIG_PREFIX)_grafana_dashboards_provider
+CONFIG_VMALERT_RULES    ?= $(CONFIG_PREFIX)_vmalert_rules
 
 # ---------- Config source files ----------
 CONFIGS_DIR             := $(DEPLOY_DIR)/configs
@@ -41,9 +44,13 @@ CONFIG_PROMTAIL_SRC     := $(CONFIGS_DIR)/promtail/promtail.yml
 CONFIG_ALERTMANAGER_SRC := $(CONFIGS_DIR)/alertmanager/alertmanager.yml
 CONFIG_GRAFANA_DS_SRC   := $(CONFIGS_DIR)/grafana/datasources.yml
 CONFIG_GRAFANA_DASH_SRC := $(CONFIGS_DIR)/grafana/dashboards.yml
+CONFIG_VMALERT_RULES_SRC := $(CONFIGS_DIR)/vmalert/rules/alerts.yml
 
 # ---------- Discord ----------
 DISCORD_WEBHOOK_URL     ?=
+
+# ---------- Scrape targets ----------
+DOCKER_METRICS_ADDR     ?= 172.17.0.1:9323
 
 # ---------- Helpers ----------
 _CID = $$(docker ps -q -f name=$(STACK_NAME)_$(SERVICE) | head -1)
@@ -178,7 +185,9 @@ configs-create: ## Create all Docker configs (DISCORD_WEBHOOK_URL= required)
 	@test -f "$(CONFIG_GRAFANA_DASH_SRC)" || { echo "Missing: $(CONFIG_GRAFANA_DASH_SRC)"; exit 1; }
 	@docker config inspect "$(CONFIG_SCRAPE)" >/dev/null 2>&1 \
 		&& echo "Already exists: $(CONFIG_SCRAPE)" \
-		|| { docker config create "$(CONFIG_SCRAPE)" "$(CONFIG_SCRAPE_SRC)" \
+		|| { DOCKER_METRICS_ADDR="$(DOCKER_METRICS_ADDR)" \
+			envsubst '$${DOCKER_METRICS_ADDR}' < "$(CONFIG_SCRAPE_SRC)" | \
+			docker config create "$(CONFIG_SCRAPE)" - \
 			&& echo "Created: $(CONFIG_SCRAPE)"; }
 	@docker config inspect "$(CONFIG_LOKI)" >/dev/null 2>&1 \
 		&& echo "Already exists: $(CONFIG_LOKI)" \
@@ -202,13 +211,19 @@ configs-create: ## Create all Docker configs (DISCORD_WEBHOOK_URL= required)
 		&& echo "Already exists: $(CONFIG_GRAFANA_DASH)" \
 		|| { docker config create "$(CONFIG_GRAFANA_DASH)" "$(CONFIG_GRAFANA_DASH_SRC)" \
 			&& echo "Created: $(CONFIG_GRAFANA_DASH)"; }
+	@test -f "$(CONFIG_VMALERT_RULES_SRC)" || { echo "Missing: $(CONFIG_VMALERT_RULES_SRC)"; exit 1; }
+	@docker config inspect "$(CONFIG_VMALERT_RULES)" >/dev/null 2>&1 \
+		&& echo "Already exists: $(CONFIG_VMALERT_RULES)" \
+		|| { docker config create "$(CONFIG_VMALERT_RULES)" "$(CONFIG_VMALERT_RULES_SRC)" \
+			&& echo "Created: $(CONFIG_VMALERT_RULES)"; }
 
 .PHONY: configs-rotate
 configs-rotate: stack-rm ## Rotate all Docker configs (DISCORD_WEBHOOK_URL= required)
 	@[ -n "$(DISCORD_WEBHOOK_URL)" ] || { echo "DISCORD_WEBHOOK_URL= required"; exit 1; }
 	@echo "Rotating configs..."
 	@for c in "$(CONFIG_SCRAPE)" "$(CONFIG_LOKI)" "$(CONFIG_PROMTAIL)" \
-	          "$(CONFIG_ALERTMANAGER)" "$(CONFIG_GRAFANA_DS)" "$(CONFIG_GRAFANA_DASH)"; do \
+	          "$(CONFIG_ALERTMANAGER)" "$(CONFIG_GRAFANA_DS)" "$(CONFIG_GRAFANA_DASH)" \
+	          "$(CONFIG_VMALERT_RULES)"; do \
 		docker config rm "$${c}" 2>/dev/null || true; \
 	done
 	@$(MAKE) configs-create DISCORD_WEBHOOK_URL="$(DISCORD_WEBHOOK_URL)"
@@ -218,12 +233,38 @@ configs-rotate: stack-rm ## Rotate all Docker configs (DISCORD_WEBHOOK_URL= requ
 configs-check: ## Verify required Docker configs exist
 	@missing=0; \
 	for c in "$(CONFIG_SCRAPE)" "$(CONFIG_LOKI)" "$(CONFIG_PROMTAIL)" \
-	         "$(CONFIG_ALERTMANAGER)" "$(CONFIG_GRAFANA_DS)" "$(CONFIG_GRAFANA_DASH)"; do \
+	         "$(CONFIG_ALERTMANAGER)" "$(CONFIG_GRAFANA_DS)" "$(CONFIG_GRAFANA_DASH)" \
+	         "$(CONFIG_VMALERT_RULES)"; do \
 		docker config inspect "$${c}" >/dev/null 2>&1 \
 			&& echo "OK: $${c}" \
 			|| { echo "MISSING: $${c}"; missing=1; }; \
 	done; \
 	[ "$${missing}" = "0" ] || { echo "Run: make configs-create DISCORD_WEBHOOK_URL=..."; exit 1; }
+
+.PHONY: alertmanager-reload
+alertmanager-reload: ## Hot-swap alertmanager config (new webhook) — no full-stack downtime
+	@[ -n "$(DISCORD_WEBHOOK_URL)" ] || { echo "DISCORD_WEBHOOK_URL= required"; exit 1; }
+	@docker service inspect "$(STACK_NAME)_alertmanager" >/dev/null 2>&1 \
+		|| { echo "ERROR: $(STACK_NAME)_alertmanager is not running — run: make stack-deploy"; exit 1; }
+	@TMPFILE=$$(mktemp) && \
+	TMPCFG="$(CONFIG_ALERTMANAGER)__$(TIMESTAMP)" && \
+	trap 'rm -f "$$TMPFILE"; docker config rm "$$TMPCFG" 2>/dev/null || true' EXIT && \
+	DISCORD_WEBHOOK_URL="$(DISCORD_WEBHOOK_URL)" \
+		envsubst < "$(CONFIG_ALERTMANAGER_SRC)" > "$$TMPFILE" && \
+	docker config create "$$TMPCFG" "$$TMPFILE" && \
+	docker service update \
+		--config-rm "$(CONFIG_ALERTMANAGER)" \
+		--config-add "source=$$TMPCFG,target=/etc/alertmanager/alertmanager.yml" \
+		"$(STACK_NAME)_alertmanager" && \
+	docker config rm "$(CONFIG_ALERTMANAGER)" && \
+	{ docker config create "$(CONFIG_ALERTMANAGER)" "$$TMPFILE" \
+	  || { echo "WARN: $(CONFIG_ALERTMANAGER) not recreated — run 'make configs-create DISCORD_WEBHOOK_URL=...' before next stack-deploy" >&2; exit 1; }; } && \
+	docker service update \
+		--config-rm "$$TMPCFG" \
+		--config-add "source=$(CONFIG_ALERTMANAGER),target=/etc/alertmanager/alertmanager.yml" \
+		"$(STACK_NAME)_alertmanager" && \
+	docker config rm "$$TMPCFG" && \
+	echo "alertmanager-reload: done — only $(STACK_NAME)_alertmanager was restarted"
 
 .PHONY: configs-list
 configs-list: ## List Docker configs
@@ -234,6 +275,7 @@ configs-list: ## List Docker configs
 stack-deploy: check-swarm check-env check-tools secrets-check configs-check ## Deploy monitoring stack
 	@echo "Deploying stack '$(STACK_NAME)' from: $(COMPOSE_FILE)"
 	@set -a && source "$(DEPLOY_DIR)/.env" && set +a && \
+	CONFIG_PREFIX="$(CONFIG_PREFIX)" SECRET_PREFIX="$(SECRET_PREFIX)" \
 	docker stack deploy --with-registry-auth -c "$(COMPOSE_FILE)" "$(STACK_NAME)" \
 		2>&1 | tee -a "$(LOG_FILE)"
 	@echo "Deployed. Check: make status"

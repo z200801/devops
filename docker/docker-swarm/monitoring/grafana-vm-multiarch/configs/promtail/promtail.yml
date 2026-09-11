@@ -80,13 +80,20 @@ scrape_configs:
   # keep only low-cardinality labels (vhost / status / method). remote_addr,
   # request, request_id, etc. stay in the line — query them with `| json` in
   # LogQL to avoid high-cardinality label explosion.
+  #
+  # Glob tolerates both separator styles before "access":
+  #   <site>-access.log  (canonical form)
+  #   <site>_access.log  (some vhost templates)
+  #   <site>-_access.log (nginx.conf.j2 __hosting_site__-_access.log)
+  # Bare /var/log/nginx/access.log (combined-format, no separator) is excluded
+  # intentionally — it is not json_analytics and would break `| json`.
   - job_name: "nginx-json"
     static_configs:
       - targets:
           - localhost
         labels:
           job: "nginx"
-          __path__: "/var/log/nginx/*-access.log"
+          __path__: "/var/log/nginx/*{-,_}access.log"
     pipeline_stages:
       - json:
           expressions:

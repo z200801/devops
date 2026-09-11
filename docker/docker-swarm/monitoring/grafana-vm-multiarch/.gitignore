@@ -1,3 +1,4 @@
 # local runtime artifacts (not for the public example)
+.env
 deploy.log
 *.log
