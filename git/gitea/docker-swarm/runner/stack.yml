@@ -1,0 +1,42 @@
+services:
+  runner:
+    image: gitea/act_runner:latest
+    # Shell wrapper reads token from Docker secret; act_runner entrypoint is /usr/bin/act_runner
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - 'export GITEA_RUNNER_REGISTRATION_TOKEN=$$(cat /run/secrets/gitea_runner_token); exec /usr/bin/act_runner daemon'
+    environment:
+      - CONFIG_FILE=/data/config.yaml
+      - GITEA_INSTANCE_URL=${GITEA_INSTANCE_URL}
+      - GITEA_RUNNER_NAME=${RUNNER_NAME}
+      - GITEA_RUNNER_LABELS=${GITEA_RUNNER_LABELS:-ubuntu-latest:docker://gitea/runner-images:ubuntu-latest,ubuntu-22.04:docker://gitea/runner-images:ubuntu-22.04}
+      - GITEA_RUNNER_INSECURE_SKIP_VERIFY=true
+      - GITEA_RUNNER_REGISTRATION_SKIP_VERIFY=true
+      - GITEA_CONFIG_INSECURE_SKIP_VERIFY=true
+    secrets:
+      - gitea_runner_token
+    volumes:
+      - runner-data:/data
+      - type: bind
+        source: ./data/config.yaml
+        target: /data/config.yaml
+        read_only: true
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 256M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+volumes:
+  runner-data:
+
+secrets:
+  gitea_runner_token:
+    external: true

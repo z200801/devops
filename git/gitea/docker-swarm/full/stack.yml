@@ -1,0 +1,138 @@
+services:
+  db:
+    image: docker.io/library/postgres:14
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-gitea}
+      - POSTGRES_DB=${POSTGRES_DB:-gitea}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/gitea_db_password
+    secrets:
+      - gitea_db_password
+    networks:
+      - gitea
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 128M
+        reservations:
+          cpus: '0.5'
+          memory: 64M
+
+  gitea:
+    image: gitea/gitea:latest
+    # Shell wrapper reads DB password from Docker secret into the env var
+    # Gitea does not support _FILE variants; /usr/bin/entrypoint is the image default
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - 'export GITEA__database__PASSWD=$$(cat /run/secrets/gitea_db_password); exec /usr/bin/entrypoint'
+    environment:
+      - USER_UID=${USER_UID:-1000}
+      - USER_GID=${USER_GID:-1000}
+      - TZ=${TZ:-UTC}
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=db:5432
+      - GITEA__database__NAME=${POSTGRES_DB:-gitea}
+      - GITEA__database__USER=${POSTGRES_USER:-gitea}
+      - GITEA__server__ROOT_URL=${ROOT_URL}
+    secrets:
+      - gitea_db_password
+      - gitea_admin_password
+    networks:
+      - gitea
+    volumes:
+      - gitea:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.constraint=gitea"
+        - "traefik.http.routers.gitea.entrypoints=websecure"
+        - "traefik.http.routers.gitea.rule=Host(`${DOMAIN}`)"
+        - "traefik.http.routers.gitea.tls=true"
+        - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+        - "traefik.tcp.routers.gitea-ssh.entrypoints=ssh"
+        - "traefik.tcp.routers.gitea-ssh.rule=HostSNI(`*`)"
+        - "traefik.tcp.services.gitea-ssh.loadbalancer.server.port=22"
+      resources:
+        limits:
+          cpus: '2'
+          memory: 256M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+  traefik:
+    image: traefik:v3.7.13
+    ports:
+      - target: 443
+        published: ${HTTPS_PORT:-443}
+        mode: host
+      - target: 22
+        published: ${SSH_PORT:-2221}
+        mode: host
+    configs:
+      - source: gitea_traefik_cert
+        target: /certs/cert.pem
+      - source: gitea_traefik_key
+        target: /certs/key.pem
+        mode: 0400
+      - source: gitea_traefik_dynamic_tls
+        target: /etc/traefik/dynamic/tls.yml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+    networks:
+      - gitea
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '1'
+          memory: 128M
+        reservations:
+          cpus: '0.25'
+          memory: 64M
+
+networks:
+  gitea:
+    driver: overlay
+
+volumes:
+  gitea:
+  postgres:
+
+configs:
+  gitea_traefik_cert:
+    external: true
+  gitea_traefik_key:
+    external: true
+  gitea_traefik_dynamic_tls:
+    external: true
+
+secrets:
+  gitea_db_password:
+    external: true
+  gitea_admin_password:
+    external: true

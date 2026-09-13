@@ -1,0 +1,20 @@
+log:
+  level: info
+host:
+  skip_verify: true
+runner:
+  file: .runner
+  capacity: 1
+  timeout: 3h
+  shutdown_timeout: 30s
+  insecure: true
+  labels:
+    - "ubuntu-latest:docker://gitea/runner-images:ubuntu-latest"
+    - "ubuntu-22.04:docker://gitea/runner-images:ubuntu-22.04"
+container:
+  network: ""
+  privileged: false
+  docker_host: ""
+  options: "-e GIT_SSL_NO_VERIFY=true -e NODE_TLS_REJECT_UNAUTHORIZED=0"
+  envs:
+    GIT_SSL_NO_VERIFY: "true"

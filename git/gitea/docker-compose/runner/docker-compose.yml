@@ -1,0 +1,29 @@
+
+services:
+  gitea-runner:
+    image: gitea/act_runner:latest
+    restart: always
+    volumes:
+      - runner-data:/data
+      - ./data/config.yaml:/data/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CONFIG_FILE=/data/config.yaml
+      - GITEA_INSTANCE_URL=${GITEA_INSTANCE_URL}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${TOKEN}
+      - GITEA_RUNNER_NAME=${RUNNER_NAME}
+      - GITEA_RUNNER_LABELS=${GITEA_RUNNER_LABELS}
+      - GITEA_RUNNER_INSECURE_SKIP_VERIFY=true
+      - GITEA_RUNNER_REGISTRATION_SKIP_VERIFY=true
+      - GITEA_CONFIG_INSECURE_SKIP_VERIFY=true
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 256M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+volumes:
+  runner-data:

@@ -1,0 +1,20 @@
+api:
+  dashboard: false
+
+entryPoints:
+  websecure:
+    address: ":443"
+  ssh:
+    address: ":22"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    constraints: "Label(`traefik.constraint`, `gitea`)"
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+log:
+  level: INFO

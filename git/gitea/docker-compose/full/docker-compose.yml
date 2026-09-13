@@ -1,0 +1,97 @@
+
+services:
+  db:
+    image: docker.io/library/postgres:14
+    restart: unless-stopped
+    expose: ['5432']
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    networks:
+      - gitea
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 128M
+        reservations:
+          cpus: '0.5'
+          memory: 64M
+
+  gitea:
+    image: gitea/gitea:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.constraint=gitea"
+      - "traefik.http.routers.gitea.entrypoints=websecure"
+      - "traefik.http.routers.gitea.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.gitea.tls=true"
+      - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+      - "traefik.tcp.routers.gitea-ssh.entrypoints=ssh"
+      - "traefik.tcp.routers.gitea-ssh.rule=HostSNI(`*`)"
+      - "traefik.tcp.services.gitea-ssh.loadbalancer.server.port=22"
+    environment:
+      - USER_UID=${USER_UID:-1000}
+      - USER_GID=${USER_GID:-1000}
+      - TZ=${TZ:-UTC}
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=db:5432
+      - GITEA__database__NAME=${POSTGRES_DB}
+      - GITEA__database__USER=${POSTGRES_USER}
+      - GITEA__database__PASSWD=${POSTGRES_PASSWORD}
+      - GITEA__server__ROOT_URL=${ROOT_URL}
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks: ['gitea']
+    expose:
+      - "3000"
+      - "22"
+    volumes:
+      - gitea:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 256M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+  traefik:
+    image: traefik:v3.7.13
+    restart: unless-stopped
+    ports:
+      - "${HTTPS_PORT:-443}:443"
+      - "${SSH_PORT:-2221}:22"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ${TLS_CERT_PATH:-./certs/cert.pem}:/certs/cert.pem:ro
+      - ${TLS_KEY_PATH:-./certs/key.pem}:/certs/key.pem:ro
+    networks:
+      - gitea
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 128M
+        reservations:
+          cpus: '0.25'
+          memory: 64M
+
+networks:
+  gitea:
+    external: false
+
+volumes:
+  gitea:
+  postgres:
