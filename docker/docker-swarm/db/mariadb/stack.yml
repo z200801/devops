@@ -1,0 +1,121 @@
+version: "3.8"
+
+# MariaDB LTS — single primary on a manager node.
+# Variables (set by the Makefile from $(DEPLOY_DIR)/.env):
+#   DB_VOLUME        existing data volume (required, never created here)
+#   DB_PORT          published host port (default 23306)
+#   SECRET_PREFIX / CONFIG_PREFIX   prefix of the external secrets/configs
+#   DOCKER_ROOT_DIR  `docker info --format '{{.DockerRootDir}}'` (volume guard)
+
+networks:
+  mariadb:
+    driver: overlay
+    attachable: true
+
+volumes:
+  db_data:
+    external: true
+    name: "${DB_VOLUME:?DB_VOLUME must name an existing volume}"
+
+configs:
+  my_cnf:
+    external: true
+    name: "${CONFIG_PREFIX:-mariadb-lts}_my_cnf"
+  repl_cnf:
+    external: true
+    name: "${CONFIG_PREFIX:-mariadb-lts}_repl_cnf"
+
+secrets:
+  root_password:
+    external: true
+    name: "${SECRET_PREFIX:-mariadb-lts}_root_password"
+  repl_password:
+    external: true
+    name: "${SECRET_PREFIX:-mariadb-lts}_repl_password"
+
+services:
+
+  # ── db — MariaDB server ───────────────────────────────────────────────────
+  db:
+    # 12.3.3, multi-arch index digest. Upgrades only via the upgrade runbook;
+    # MARIADB_AUTO_UPGRADE is deliberately not set.
+    image: mariadb:12.3.3@sha256:4ebbcf100a3ba320766dfa0e1af008df12261301db6ef72798c7650f70794aed
+    networks:
+      - mariadb
+    environment:
+      # Used only when the datadir is empty (test stacks); an existing
+      # datadir keeps its own accounts.
+      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/root_password
+    secrets:
+      - root_password
+      # read by make repl-user-create / repl-start (not by the server)
+      - repl_password
+    configs:
+      - source: my_cnf
+        target: /etc/mysql/conf.d/my.cnf
+      # standalone or replication settings, rendered per host (DB_ROLE)
+      - source: repl_cnf
+        target: /etc/mysql/conf.d/replication.cnf
+    volumes:
+      - type: volume
+        source: db_data
+        target: /var/lib/mysql
+      # Volume guard: Swarm auto-creates a missing volume (even an external
+      # one) and the entrypoint would initialise an empty database on it.
+      # A bind source must exist, so the task is rejected instead when
+      # DB_VOLUME does not exist. Read-only, not used by the server.
+      - type: bind
+        source: "${DOCKER_ROOT_DIR:-/var/lib/docker}/volumes/${DB_VOLUME}"
+        target: /run/db-volume-guard
+        read_only: true
+    ports:
+      - target: 3306
+        published: ${DB_PORT:-23306}
+        protocol: tcp
+        mode: host
+    healthcheck:
+      # Uses .my-healthcheck.cnf in the datadir (created by the entrypoint);
+      # its password must match the healthcheck@ accounts: make healthcheck-check.
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    stop_grace_period: 120s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      # One datadir: the old task must stop before the new one starts.
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: pause
+        order: stop-first
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: pause
+        order: stop-first
+      # `any`, not `on-failure`: when the healthcheck fails Swarm stops the
+      # container, mariadbd shuts down cleanly (exit 0) and with on-failure
+      # no new task is started (service 0/1). No
+      # max_attempts: keep replacing the task. `docker service scale =0`
+      # and `stack-rm` still stop it for good.
+      restart_policy:
+        condition: any
+        delay: 10s
+        window: 120s
+      resources:
+        # mariadbd reached 257M during a full dump under 256M (OOM).
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

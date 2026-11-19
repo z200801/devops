@@ -1,0 +1,20 @@
+# Replication (DB_ROLE=primary|replica in $(DEPLOY_DIR)/.env).
+# Rendered with SERVER_ID, DB_READ_ONLY (NO_LOCK_NO_ADMIN for replica —
+# blocks writes by root too; replication threads still apply — 0 for primary)
+# and DB_EVENT_SCHEDULER (DISABLED for replica: 12.3.3 aborts at startup with
+# NO_LOCK_NO_ADMIN otherwise, "Failed to open table mysql.event"; OFF for primary).
+# Plain "key = value" lines only: the my.cnf read check compares them
+# literally with my_print_defaults.
+[mysqld]
+server_id = ${SERVER_ID}
+log_bin = mysql-bin
+relay_log = relay-bin
+binlog_format = ROW
+log_slave_updates = 1
+sync_binlog = 1
+gtid_strict_mode = 0
+read_only = ${DB_READ_ONLY}
+event_scheduler = ${DB_EVENT_SCHEDULER}
+rpl_semi_sync_master_enabled = 1
+rpl_semi_sync_slave_enabled = 1
+rpl_semi_sync_master_timeout = 3000

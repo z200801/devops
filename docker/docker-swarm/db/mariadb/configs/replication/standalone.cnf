@@ -1,0 +1,4 @@
+# No replication (DB_ROLE empty in $(DEPLOY_DIR)/.env): no binary log,
+# writable. Switch with DB_ROLE + make reload-service.
+[mysqld]
+read_only = 0
